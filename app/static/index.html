@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bhagavad Gita Chatbot</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; color: #0f172a; }
+      h1 { font-size: 20px; margin: 0 0 16px; }
+      .card { max-width: 800px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
+      .row { display: flex; gap: 8px; }
+      input[type="text"] { flex: 1; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
+      button { padding: 10px 14px; border-radius: 8px; border: 0; background: #2563eb; color: #fff; cursor: pointer; }
+      button:disabled { background: #94a3b8; cursor: not-allowed; }
+      .answer { margin-top: 12px; padding: 12px; background: #f8fafc; border-radius: 8px; white-space: pre-wrap; }
+      .sources { margin-top: 8px; font-size: 12px; color: #475569; }
+      .muted { color: #64748b; font-size: 12px; }
+      .feedback { margin-top: 16px; display: grid; gap: 8px; }
+      textarea { width: 100%; min-height: 70px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
+      .stars { display: flex; gap: 6px; align-items: center; }
+      .star { font-size: 22px; cursor: pointer; color: #cbd5e1; }
+      .star.active { color: #f59e0b; }
+      .row-right { display: flex; gap: 8px; justify-content: flex-end; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Bhagavad Gita Chatbot</h1>
+      <div class="row">
+        <input id="query" type="text" placeholder="Ask a question about the Bhagavad Gita..." />
+        <button id="askBtn">Ask</button>
+      </div>
+      <div id="status" class="muted" style="margin-top:8px;"></div>
+      <div id="answer" class="answer" style="display:none;"></div>
+      <div id="sources" class="sources" style="display:none;"></div>
+
+      <div class="feedback" id="feedback" style="display:none;">
+        <div class="stars" id="stars"></div>
+        <textarea id="feedbackText" placeholder="Optional feedback (required if rating ≤ 3)"></textarea>
+        <div class="row-right">
+          <button id="submitFeedbackBtn">Submit Feedback</button>
+        </div>
+        <div id="feedbackMsg" class="muted"></div>
+      </div>
+    </div>
+
+    <script>
+      const askBtn = document.getElementById('askBtn');
+      const queryInput = document.getElementById('query');
+      const statusEl = document.getElementById('status');
+      const answerEl = document.getElementById('answer');
+      const sourcesEl = document.getElementById('sources');
+      const feedbackSection = document.getElementById('feedback');
+      const starsEl = document.getElementById('stars');
+      const feedbackText = document.getElementById('feedbackText');
+      const submitFeedbackBtn = document.getElementById('submitFeedbackBtn');
+      const feedbackMsg = document.getElementById('feedbackMsg');
+
+      let lastItemId = null; // optionally wire to your answer id if available
+      let currentRating = 0;
+      const sessionId = crypto.randomUUID();
+
+      function setStars(rating) {
+        starsEl.innerHTML = '';
+        for (let i = 1; i <= 5; i++) {
+          const span = document.createElement('span');
+          span.textContent = '★';
+          span.className = 'star' + (i <= rating ? ' active' : '');
+          span.title = i + ' star' + (i > 1 ? 's' : '');
+          span.onclick = () => { currentRating = i; setStars(currentRating); };
+          starsEl.appendChild(span);
+        }
+      }
+      setStars(0);
+
+      async function ask() {
+        const query = queryInput.value.trim();
+        if (!query) {
+          return;
+        }
+        statusEl.textContent = 'Asking...';
+        answerEl.style.display = 'none';
+        sourcesEl.style.display = 'none';
+        feedbackSection.style.display = 'none';
+        feedbackMsg.textContent = '';
+
+        try {
+          const res = await fetch('/chat/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query })
+          });
+          if (!res.ok) throw new Error('Chat request failed');
+          const data = await res.json();
+          answerEl.textContent = data.answer || 'No answer.';
+          answerEl.style.display = 'block';
+          if (Array.isArray(data.sources) && data.sources.length) {
+            sourcesEl.textContent = 'Sources: ' + data.sources.map(s => `#${s.chunk_id || 'unknown'} (score ${s.score?.toFixed(2)})`).join(', ');
+            sourcesEl.style.display = 'block';
+          }
+          statusEl.textContent = '';
+          feedbackSection.style.display = 'block';
+          currentRating = 0;
+          setStars(0);
+          feedbackText.value = '';
+          lastItemId = data.sources?.[0]?.chunk_id || null;
+        } catch (e) {
+          statusEl.textContent = 'Error: ' + e.message;
+        }
+      }
+
+      async function submitFeedback() {
+        if (currentRating < 1 || currentRating > 5) {
+          feedbackMsg.textContent = 'Please select a rating (1-5).';
+          return;
+        }
+        const payload = {
+          rating: currentRating,
+          feedback: feedbackText.value.trim() || null,
+          session_id: sessionId,
+          item_id: lastItemId,
+          metadata: { query: queryInput.value.trim() }
+        };
+        try {
+          const res = await fetch('/feedback/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || 'Submit failed');
+          feedbackMsg.textContent = data.message || 'Thank you for your feedback!';
+        } catch (e) {
+          feedbackMsg.textContent = 'Error: ' + e.message;
+        }
+      }
+
+      askBtn.addEventListener('click', ask);
+      queryInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') ask(); });
+      submitFeedbackBtn.addEventListener('click', submitFeedback);
+    </script>
+  </body>
+  </html>
+
+
