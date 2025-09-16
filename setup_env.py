@@ -41,6 +41,10 @@ def create_env_file():
     if not index_name:
         index_name = "chatbot-index"
     
+    # Get Supabase credentials (optional, needed for feedback storage)
+    supabase_url = input("🔗 Enter your Supabase URL (optional): ").strip()
+    supabase_key = input("🗝️  Enter your Supabase anon/service key (optional): ").strip()
+
     # Create .env file
     env_content = f"""# OpenAI API Key
 OPENAI_API_KEY={openai_key}
@@ -50,6 +54,10 @@ PINECONE_API_KEY={pinecone_key}
 
 # Pinecone Index Name
 PINECONE_INDEX={index_name}
+
+# Supabase (optional; required for feedback storage)
+SUPABASE_URL={supabase_url}
+SUPABASE_ANON_KEY={supabase_key}
 """
     
     try:
