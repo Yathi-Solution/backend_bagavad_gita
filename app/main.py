@@ -1,10 +1,20 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from app.routers import ingest, chat, feedback
 
 app = FastAPI(title="YouTube Transcript Chatbot")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(ingest.router, prefix="/ingest", tags=["Ingest"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
