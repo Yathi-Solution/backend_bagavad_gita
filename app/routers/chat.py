@@ -136,6 +136,8 @@ def detect_language_and_greeting(text: str) -> tuple[bool, str]:
         # Fallback to simple pattern matching if LLM fails
         return detect_greeting_fallback(text)
 
+
+
 def detect_greeting_fallback(text: str) -> tuple[bool, str]:
     """Fallback greeting detection using simple patterns"""
     text_lower = text.lower().strip()
