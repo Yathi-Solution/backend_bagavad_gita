@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import os
 import json
 from app.services.supabase_client import supabase
+from app.routers.chat import conversation_history  # to fetch last turn for query/response
 from fastapi import Response
 
 
@@ -67,11 +68,28 @@ def _save_to_supabase(record: Dict[str, Any]) -> None:
 @router.post("/rate", response_model=ShouldAskResponse)
 def rate(request: RatingRequest):
     """Record a rating and tell the client whether to ask for feedback text."""
+    # Ensure mandatory query_text for DB NOT NULL; try to derive from last turn or metadata
+    query_text = None
+    answer_text = None
+    language = None
+    if request.session_id and request.session_id in conversation_history and conversation_history[request.session_id]:
+        last_turn = conversation_history[request.session_id][-1]
+        query_text = last_turn.get("user_query")
+        answer_text = last_turn.get("bot_response")
+        language = last_turn.get("language")
+    if not query_text:
+        query_text = (request.metadata or {}).get("query") if request.metadata else None
+    if not query_text:
+        query_text = "(rating only)"
+
     _save_to_supabase({
         "type": "rating",
         "rating": request.rating,
         "session_id": request.session_id,
         "item_id": request.item_id,
+        "language": language,
+        "query_text": query_text,
+        "answer_text": answer_text,
         "metadata": request.metadata,
     })
 
@@ -92,12 +110,29 @@ def submit(request: FeedbackSubmitRequest):
             message="Feedback text is required for ratings of 3 or below.",
         )
 
+    # Build payload including query_text (NOT NULL) and optional answer_text/language
+    query_text = None
+    answer_text = None
+    language = None
+    if request.session_id and request.session_id in conversation_history and conversation_history[request.session_id]:
+        last_turn = conversation_history[request.session_id][-1]
+        query_text = last_turn.get("user_query")
+        answer_text = last_turn.get("bot_response")
+        language = last_turn.get("language")
+    if not query_text and request.metadata:
+        query_text = request.metadata.get("query")
+    if not query_text:
+        query_text = "(unknown)"
+
     _save_to_supabase({
         "type": "feedback",
         "rating": request.rating,
         "feedback": request.feedback,
         "session_id": request.session_id,
         "item_id": request.item_id,
+        "language": language,
+        "query_text": query_text,
+        "answer_text": answer_text,
         "metadata": request.metadata,
     })
 
