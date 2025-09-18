@@ -10,7 +10,11 @@ app = FastAPI(title="YouTube Transcript Chatbot")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://bagavad-gita-dev.vercel.app",
+        "https://bagavad-gita.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
