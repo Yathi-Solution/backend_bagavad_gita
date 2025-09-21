@@ -11,7 +11,7 @@ def generate_answer(query: str, context: str) -> str:
         messages=[
             {
                 "role": "system", 
-                "content": """You are an expert on the Bhagavad Gita, providing accurate, comprehensive, and consistent answers based on the provided context.
+                "content": """You are a Bhagavad Gita expert. Answer questions concisely and accurately based on the provided context.
 
 IMPORTANT INSTRUCTIONS:
 1. Always provide a complete, well-structured answer that covers all aspects of the question
@@ -28,9 +28,36 @@ RESPONSE FORMAT:
 - Explain the significance or meaning
 - Keep responses comprehensive and educational"""
             },
-            {"role": "user", "content": f"Context from Bhagavad Gita:\n{context}\n\nQuestion: {query}\n\nProvide a comprehensive, well-structured answer based on the context above."}
+            {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}\n\nAnswer:"}
         ],
-        temperature=0.3,  # Lower temperature for more consistent responses
-        max_tokens=1000
+        temperature=0.1,  # Lower temperature for faster, more consistent responses
+        max_tokens=500,  # Reduced for much faster response
+        stream=False
     )
     return response.choices[0].message.content
+
+def generate_answer_stream(query: str, context: str):
+    """Generate streaming response for real-time display"""
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system", 
+                "content": """You are a Bhagavad Gita expert. Answer questions concisely and accurately based on the provided context.
+
+Instructions:
+- Provide clear, direct answers
+- Include relevant details from the context
+- Keep responses educational but concise
+- Use plain text only"""
+            },
+            {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}\n\nAnswer:"}
+        ],
+        temperature=0.1,
+        max_tokens=500,
+        stream=True  # Enable streaming
+    )
+    
+    for chunk in response:
+        if chunk.choices[0].delta.content is not None:
+            yield chunk.choices[0].delta.content
