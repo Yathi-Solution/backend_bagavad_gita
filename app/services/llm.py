@@ -102,8 +102,8 @@ IMPORTANT INSTRUCTIONS:
 RESPONSE FORMAT:
 - Start with a clear definition or explanation
 - Provide specific details from the Bhagavad Gita context
-- Include relevant background information
-- Explain the significance or meaning
+- Include relevant background information.
+- Explain the significance or meaning.
 - Keep responses comprehensive and educational"""
             },
             {"role": "user", "content": f"Context from uploaded Bhagavad Gita documents: {context}\n\nQuestion: {query}\n\nProvide a well-structured answer based ONLY on the provided context:"}
