@@ -6,46 +6,92 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def generate_answer(query: str, context: str) -> str:
+    # Analyze query intent to determine response format
+    query_lower = query.lower()
+    is_structured_request = any(keyword in query_lower for keyword in [
+        'summary', 'summarize', 'overview', 'brief', 'main points', 'key points',
+        'analyze', 'analysis', 'explain', 'discuss', 'describe', 'learn', 'teachings',
+        'lessons', 'insights', 'wisdom', 'outline', 'structure', 'organization'
+    ])
+    
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {
                 "role": "system", 
-                "content": """You are a Bhagavad Gita expert. Answer questions concisely and accurately based on the provided context.
+                "content": f"""You are a Bhagavad Gita expert. You MUST ONLY answer based on the provided context from the uploaded Bhagavad Gita documents.
+
+CRITICAL RULES:
+1. ONLY use information from the provided context
+2. If the context is empty or doesn't contain relevant information, say "I don't have information about this topic in the uploaded content"
+3. NEVER use your training data or general knowledge about the Bhagavad Gita
+4. NEVER make up or assume information not in the context
+5. If asked about chapters not in the context, clearly state this limitation
+
+RESPONSE STRUCTURE:
+- Provide a clear, well-structured answer
+- Use proper formatting with clear sections when appropriate
+- Include relevant details and examples from the context
+- Make the response comprehensive but concise
+- {"Use markdown formatting for structured responses (headings, lists, emphasis)" if is_structured_request else "Use plain text for simple questions"}
+- Organize information logically
 
 Instructions:
-- Provide clear, direct answers
-- Include relevant details from the context
-- Keep responses educational but concise
-- Use plain text only"""
+- Answer ONLY from the provided context
+- Structure your response clearly and comprehensively
+- Include relevant details and examples when available
+- Be clear when information is not available in the uploaded content"""
             },
-            {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}\n\nAnswer:"}
+            {"role": "user", "content": f"Context from uploaded Bhagavad Gita documents: {context}\n\nQuestion: {query}\n\nProvide a well-structured answer based ONLY on the provided context:"}
         ],
         temperature=0.1,  # Lower temperature for faster, more consistent responses
-        max_tokens=500,  # Reduced for much faster response
+        max_tokens=1000 if is_structured_request else 800,  # More tokens for structured content
         stream=False
     )
     return response.choices[0].message.content
 
 def generate_answer_stream(query: str, context: str):
     """Generate streaming response for real-time display"""
+    # Analyze query intent to determine response format
+    query_lower = query.lower()
+    is_structured_request = any(keyword in query_lower for keyword in [
+        'summary', 'summarize', 'overview', 'brief', 'main points', 'key points',
+        'analyze', 'analysis', 'explain', 'discuss', 'describe', 'learn', 'teachings',
+        'lessons', 'insights', 'wisdom', 'outline', 'structure', 'organization'
+    ])
+    
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {
                 "role": "system", 
-                "content": """You are a Bhagavad Gita expert. Answer questions concisely and accurately based on the provided context.
+                "content": f"""You are a Bhagavad Gita expert. You MUST ONLY answer based on the provided context from the uploaded Bhagavad Gita documents.
+
+CRITICAL RULES:
+1. ONLY use information from the provided context
+2. If the context is empty or doesn't contain relevant information, say "I don't have information about this topic in the uploaded content"
+3. NEVER use your training data or general knowledge about the Bhagavad Gita
+4. NEVER make up or assume information not in the context
+5. If asked about chapters not in the context, clearly state this limitation
+
+RESPONSE STRUCTURE:
+- Provide a clear, well-structured answer
+- Use proper formatting with clear sections when appropriate
+- Include relevant details and examples from the context
+- Make the response comprehensive but concise
+- {"Use markdown formatting for structured responses (headings, lists, emphasis)" if is_structured_request else "Use plain text for simple questions"}
+- Organize information logically
 
 Instructions:
-- Provide clear, direct answers
-- Include relevant details from the context
-- Keep responses educational but concise
-- Use plain text only"""
+- Answer ONLY from the provided context
+- Structure your response clearly and comprehensively
+- Include relevant details and examples when available
+- Be clear when information is not available in the uploaded content"""
             },
-            {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}\n\nAnswer:"}
+            {"role": "user", "content": f"Context from uploaded Bhagavad Gita documents: {context}\n\nQuestion: {query}\n\nProvide a well-structured answer based ONLY on the provided context:"}
         ],
         temperature=0.1,
-        max_tokens=500,
+        max_tokens=1000 if is_structured_request else 800,  # More tokens for structured content
         stream=True  # Enable streaming
     )
     

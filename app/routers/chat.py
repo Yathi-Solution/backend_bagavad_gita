@@ -78,9 +78,31 @@ async def chat_post_stream(request: ChatRequest):
         # Process query to get context
         def process_and_stream():
             try:
+                # Analyze query intent
+                intent = analyze_query_intent(request.query)
+                
+                # Validate query against available content
+                validation_result = validate_query_against_available_content(request.query)
+                if not validation_result["is_valid"]:
+                    error_response = {
+                        "answer": validation_result["message"],
+                        "confidence": 0,
+                        "sources": [],
+                        "available_chapters": validation_result.get("available_chapters", [])
+                    }
+                    yield f"data: {json.dumps(error_response)}\n\n"
+                    return
+                
                 # Normalize and expand the query
                 normalized_query = normalize_query(request.query)
-                combined_query = f"{request.query} {normalized_query}" if normalized_query != request.query else request.query
+                
+                # For structured content requests, expand the query further
+                if intent["needs_comprehensive_context"]:
+                    expanded_query = expand_query_for_structured_content(request.query, intent)
+                    combined_query = f"{request.query} {normalized_query} {expanded_query}"
+                else:
+                    combined_query = f"{request.query} {normalized_query}" if normalized_query != request.query else request.query
+                
                 query_vector = embeddings.embed_text(combined_query)
                 
                 # Search for similar chunks in Pinecone
@@ -90,19 +112,22 @@ async def chat_post_stream(request: ChatRequest):
                     include_metadata=True
                 )
                 
-                if not results.matches or results.matches[0].score < 0.3:
+                # Adjust threshold based on query type
+                min_score = 0.3 if intent["needs_comprehensive_context"] else 0.5
+                
+                if not results.matches or results.matches[0].score < min_score:
                     error_response = {
-                        "answer": "Sorry, I couldn't find relevant information about this topic. Please try rephrasing your question or ask about a different topic.",
+                        "answer": "I don't have information about this topic, Please try rephrasing your question or ask about a different topic.",
                         "confidence": results.matches[0].score if results.matches else 0,
                         "sources": []
                     }
                     yield f"data: {json.dumps(error_response)}\n\n"
                     return
                 
-                # Prepare context
+                # Use matches based on query type and score
                 all_matches = []
                 for match in results.matches:
-                    if match.score > 0.3:
+                    if match.score > min_score:  # Use adjusted threshold
                         all_matches.append({
                             "text": match.metadata["text"],
                             "chunk_id": match.metadata.get("chunk_id", "unknown"),
@@ -113,15 +138,23 @@ async def chat_post_stream(request: ChatRequest):
                 reranked_chunks = rerank_chunks_fast(request.query, all_matches)
                 if not reranked_chunks:
                     error_response = {
-                        "answer": "Sorry, I couldn't find relevant information about this topic.",
+                        "answer": "I don't have information about this topic, Please try rephrasing your question or ask about a different topic.",
                         "confidence": 0,
                         "sources": []
                     }
                     yield f"data: {json.dumps(error_response)}\n\n"
                     return
                 
-                context_chunks = reranked_chunks[:3]
-                context = " ".join([chunk['text'] for chunk in context_chunks])
+                # Use more chunks for structured content requests
+                max_chunks = 8 if intent["needs_comprehensive_context"] else 5
+                context_chunks = reranked_chunks[:max_chunks]
+                
+                # Create well-structured context with chunk information
+                context_parts = []
+                for i, chunk in enumerate(context_chunks, 1):
+                    context_parts.append(f"Source {i} (Score: {chunk['score']:.2f}): {chunk['text']}")
+                
+                context = "\n\n".join(context_parts)
                 
                 # Start streaming the answer
                 full_answer = ""
@@ -139,7 +172,10 @@ async def chat_post_stream(request: ChatRequest):
                 final_response = {
                     "answer": full_answer,
                     "confidence": reranked_chunks[0]["rerank_score"] if reranked_chunks else 0,
-                    "sources": context_chunks[:2],
+                    "sources": context_chunks[:3],
+                    "total_sources_found": len(reranked_chunks),
+                    "context_quality": "high" if reranked_chunks[0]["rerank_score"] > 0.7 else "medium" if reranked_chunks[0]["rerank_score"] > 0.5 else "low",
+                    "response_type": "comprehensive",
                     "is_streaming": False
                 }
                 
@@ -167,17 +203,31 @@ async def chat_get_stream(query: str = Query(..., description="Your question abo
     return await chat_post_stream(request)
 
 def normalize_query(query: str) -> str:
-    """OPTIMIZED: Fast query normalization"""
+    """Enhanced query normalization for better context matching"""
     # Convert to lowercase and strip
     normalized = query.strip().lower()
     
-    # OPTIMIZATION: Simplified variations for speed
+    # Enhanced variations for better matching
     if "what is" in normalized:
-        normalized += " define explain meaning"
+        normalized += " define explain meaning concept"
     elif "dharma" in normalized:
-        normalized += " duty righteousness"
+        normalized += " duty righteousness moral obligation"
     elif "karma" in normalized:
-        normalized += " action deeds"
+        normalized += " action deeds consequences"
+    elif "moksha" in normalized:
+        normalized += " liberation freedom enlightenment"
+    elif "yoga" in normalized:
+        normalized += " discipline practice union"
+    elif "bhakti" in normalized:
+        normalized += " devotion love worship"
+    elif "jnana" in normalized:
+        normalized += " knowledge wisdom understanding"
+    elif "karma yoga" in normalized:
+        normalized += " action without attachment selfless service"
+    elif "bhakti yoga" in normalized:
+        normalized += " devotional service love for god"
+    elif "jnana yoga" in normalized:
+        normalized += " path of knowledge wisdom"
     
     return normalized
 
@@ -251,12 +301,29 @@ def process_chat_query(query: str):
         if cached_response:
             return cached_response
         
+        # Analyze query intent
+        intent = analyze_query_intent(query)
+        
+        # Validate query against available content
+        validation_result = validate_query_against_available_content(query)
+        if not validation_result["is_valid"]:
+            return {
+                "answer": validation_result["message"],
+                "confidence": 0,
+                "sources": [],
+                "available_chapters": validation_result.get("available_chapters", [])
+            }
+        
         # Normalize and expand the query
         normalized_query = normalize_query(query)
         
-        # OPTIMIZATION: Use only one optimized query instead of dual search
-        # Combine original and normalized query for better results
-        combined_query = f"{query} {normalized_query}" if normalized_query != query else query
+        # For structured content requests, expand the query further
+        if intent["needs_comprehensive_context"]:
+            expanded_query = expand_query_for_structured_content(query, intent)
+            combined_query = f"{query} {normalized_query} {expanded_query}"
+        else:
+            combined_query = f"{query} {normalized_query}" if normalized_query != query else query
+        
         query_vector = embeddings.embed_text(combined_query)
         
         # OPTIMIZATION: Single Pinecone search with fewer results for speed
@@ -266,17 +333,20 @@ def process_chat_query(query: str):
             include_metadata=True
         )
 
-        if not results.matches or results.matches[0].score < 0.3:
+        # Adjust threshold based on query type
+        min_score = 0.3 if intent["needs_comprehensive_context"] else 0.5
+        
+        if not results.matches or results.matches[0].score < min_score:
             return {
-                "answer": "Sorry, I couldn't find relevant information about this topic. Please try rephrasing your question or ask about a different topic.",
+                "answer": "I don't have information about this topic, Please try rephrasing your question or ask about a different topic.",
                 "confidence": results.matches[0].score if results.matches else 0,
                 "sources": []
             }
 
-        # OPTIMIZATION: Simplified processing - convert matches directly
+        # Use matches based on query type and score
         all_matches = []
         for match in results.matches:
-            if match.score > 0.3:  # Lower threshold for faster processing
+            if match.score > min_score:  # Use adjusted threshold
                 all_matches.append({
                     "text": match.metadata["text"],
                     "chunk_id": match.metadata.get("chunk_id", "unknown"),
@@ -289,16 +359,21 @@ def process_chat_query(query: str):
         
         if not reranked_chunks:
             return {
-                "answer": "Sorry, I couldn't find relevant information about this topic. Please try rephrasing your question or ask about a different topic.",
+                "answer": "I don't have information about this topic, Please try rephrasing your question or ask about a different topic.",
                 "confidence": 0,
                 "sources": []
             }
 
-        # OPTIMIZATION: Use fewer chunks for faster processing
-        context_chunks = reranked_chunks[:3]  # Use only top 3 for speed
+        # Use more chunks for structured content requests
+        max_chunks = 8 if intent["needs_comprehensive_context"] else 5
+        context_chunks = reranked_chunks[:max_chunks]
         
-        # OPTIMIZATION: Simplified context string
-        context = " ".join([chunk['text'] for chunk in context_chunks])
+        # Create well-structured context with chunk information
+        context_parts = []
+        for i, chunk in enumerate(context_chunks, 1):
+            context_parts.append(f"Source {i} (Score: {chunk['score']:.2f}): {chunk['text']}")
+        
+        context = "\n\n".join(context_parts)
         
         # Generate answer using LLM
         answer = llm.generate_answer(query, context)
@@ -306,7 +381,10 @@ def process_chat_query(query: str):
         response = {
             "answer": answer,
             "confidence": reranked_chunks[0]["rerank_score"] if reranked_chunks else 0,
-            "sources": context_chunks[:3]  # Return top 3 sources
+            "sources": context_chunks[:3],  # Return top 3 sources
+            "total_sources_found": len(reranked_chunks),
+            "context_quality": "high" if reranked_chunks[0]["rerank_score"] > 0.7 else "medium" if reranked_chunks[0]["rerank_score"] > 0.5 else "low",
+            "response_type": "comprehensive"
         }
         
         # Cache the response
@@ -330,6 +408,217 @@ def get_cache_stats():
         "cache_ttl": CACHE_TTL,
         "cached_queries": list(response_cache.keys())[:10]  # First 10 for debugging
     }
+
+@router.get("/available-chapters")
+def get_available_chapters():
+    """Get information about what chapters are available in Pinecone"""
+    try:
+        # Get a sample of vectors to see what chapters are available
+        sample_results = pinecone_client.index.query(
+            vector=[0.0] * 1536,  # Dummy vector
+            top_k=100,
+            include_metadata=True
+        )
+        
+        chapters = set()
+        chunk_samples = []
+        
+        for match in sample_results.matches:
+            chunk_id = match.metadata.get("chunk_id", "")
+            chunk_samples.append({
+                "chunk_id": chunk_id,
+                "score": match.score,
+                "text_preview": str(match.metadata.get("text", ""))[:100] + "..." if len(str(match.metadata.get("text", ""))) > 100 else str(match.metadata.get("text", ""))
+            })
+            
+            if "chapter" in chunk_id.lower():
+                # Extract chapter number from chunk_id
+                import re
+                chapter_match = re.search(r'chapter(\d+)', chunk_id.lower())
+                if chapter_match:
+                    chapters.add(f"Chapter {chapter_match.group(1)}")
+        
+        return {
+            "available_chapters": sorted(list(chapters)),
+            "total_vectors": len(sample_results.matches),
+            "chunk_samples": chunk_samples[:10],  # First 10 for debugging
+            "message": "These are the chapters available in the uploaded content"
+        }
+    except Exception as e:
+        return {"error": f"Failed to get chapter information: {str(e)}"}
+
+@router.get("/debug-pinecone")
+def debug_pinecone_content():
+    """Debug endpoint to see what's actually in Pinecone"""
+    try:
+        # Get sample results
+        sample_results = pinecone_client.index.query(
+            vector=[0.0] * 1536,
+            top_k=20,
+            include_metadata=True
+        )
+        
+        debug_info = {
+            "total_matches": len(sample_results.matches),
+            "samples": []
+        }
+        
+        for i, match in enumerate(sample_results.matches):
+            debug_info["samples"].append({
+                "index": i,
+                "score": match.score,
+                "chunk_id": match.metadata.get("chunk_id", "N/A"),
+                "text_preview": str(match.metadata.get("text", ""))[:200] + "..." if len(str(match.metadata.get("text", ""))) > 200 else str(match.metadata.get("text", "")),
+                "all_metadata_keys": list(match.metadata.keys()) if match.metadata else []
+            })
+        
+        return debug_info
+    except Exception as e:
+        return {"error": f"Failed to debug Pinecone content: {str(e)}"}
+
+def validate_query_against_available_content(query: str) -> dict:
+    """Validate if the query is asking about content available in Pinecone"""
+    import re
+    
+    # Extract chapter numbers from query
+    chapter_matches = re.findall(r'chapter\s*(\d+)', query.lower())
+    
+    if chapter_matches:
+        # Get available chapters with better detection
+        try:
+            sample_results = pinecone_client.index.query(
+                vector=[0.0] * 1536,
+                top_k=100,  # Increased to get more samples
+                include_metadata=True
+            )
+            
+            available_chapters = set()
+            for match in sample_results.matches:
+                chunk_id = match.metadata.get("chunk_id", "").lower()
+                metadata_text = str(match.metadata.get("text", "")).lower()
+                
+                # Try multiple patterns to find chapter numbers
+                patterns = [
+                    r'chapter\s*(\d+)',  # "chapter 2", "chapter2"
+                    r'ch\s*(\d+)',       # "ch 2", "ch2"
+                    r'chapter\s*(\d+)\s*', # "chapter 2 " with space
+                    r'(\d+)\s*chapter',  # "2 chapter"
+                ]
+                
+                for pattern in patterns:
+                    chapter_match = re.search(pattern, chunk_id)
+                    if chapter_match:
+                        available_chapters.add(int(chapter_match.group(1)))
+                        break
+                
+                # Also check in metadata text
+                for pattern in patterns:
+                    chapter_match = re.search(pattern, metadata_text)
+                    if chapter_match:
+                        available_chapters.add(int(chapter_match.group(1)))
+                        break
+            
+            # If no chapters found with patterns, try a broader search
+            if not available_chapters:
+                # Search for any content that might be chapter-related
+                broader_results = pinecone_client.index.query(
+                    vector=embeddings.embed_text("chapter content"),
+                    top_k=20,
+                    include_metadata=True
+                )
+                
+                for match in broader_results.matches:
+                    if match.score > 0.3:  # Lower threshold for broader search
+                        chunk_id = match.metadata.get("chunk_id", "").lower()
+                        metadata_text = str(match.metadata.get("text", "")).lower()
+                        
+                        for pattern in patterns:
+                            chapter_match = re.search(pattern, chunk_id)
+                            if chapter_match:
+                                available_chapters.add(int(chapter_match.group(1)))
+                                break
+                            
+                            chapter_match = re.search(pattern, metadata_text)
+                            if chapter_match:
+                                available_chapters.add(int(chapter_match.group(1)))
+                                break
+            
+            # Check if requested chapters are available
+            requested_chapters = [int(ch) for ch in chapter_matches]
+            unavailable_chapters = [ch for ch in requested_chapters if ch not in available_chapters]
+            
+            if unavailable_chapters and available_chapters:
+                return {
+                    "is_valid": False,
+                    "available_chapters": sorted(list(available_chapters)),
+                    "unavailable_chapters": unavailable_chapters,
+                    "message": f"Chapters {unavailable_chapters} are not available in the uploaded content. Available chapters: {sorted(list(available_chapters))}"
+                }
+            elif unavailable_chapters and not available_chapters:
+                # If no chapters found at all, allow the query to proceed
+                # The actual search will determine if content exists
+                return {"is_valid": True, "note": "Could not detect chapter structure, proceeding with search"}
+        except Exception as e:
+            return {"is_valid": True, "error": f"Could not validate: {str(e)}"}
+    
+    return {"is_valid": True}
+
+def analyze_query_intent(query: str) -> dict:
+    """Analyze query intent and determine if it's asking for structured content"""
+    import re
+    query_lower = query.lower()
+    
+    # Keywords that indicate structured content requests
+    summary_keywords = ['summary', 'summarize', 'overview', 'brief', 'main points', 'key points']
+    analysis_keywords = ['analyze', 'analysis', 'explain', 'discuss', 'describe']
+    learning_keywords = ['learn', 'teachings', 'lessons', 'insights', 'wisdom']
+    structure_keywords = ['outline', 'structure', 'organization', 'sections']
+    
+    # Check for chapter-specific requests
+    chapter_pattern = r'chapter\s*(\d+)'
+    chapter_matches = re.findall(chapter_pattern, query_lower)
+    
+    # Determine query type
+    query_type = "general"
+    if any(keyword in query_lower for keyword in summary_keywords):
+        query_type = "summary"
+    elif any(keyword in query_lower for keyword in analysis_keywords):
+        query_type = "analysis"
+    elif any(keyword in query_lower for keyword in learning_keywords):
+        query_type = "learning"
+    elif any(keyword in query_lower for keyword in structure_keywords):
+        query_type = "structure"
+    
+    return {
+        "query_type": query_type,
+        "is_structured_request": query_type != "general",
+        "chapter_numbers": [int(ch) for ch in chapter_matches] if chapter_matches else [],
+        "needs_comprehensive_context": query_type in ["summary", "analysis", "learning", "structure"]
+    }
+
+def expand_query_for_structured_content(query: str, intent: dict) -> str:
+    """Expand query to better match structured content in Pinecone"""
+    query_lower = query.lower()
+    expanded_query = query
+    
+    # Add relevant keywords based on query type
+    if intent["query_type"] == "summary":
+        expanded_query += " main themes concepts teachings key ideas important points overview"
+    elif intent["query_type"] == "analysis":
+        expanded_query += " detailed explanation concepts meaning significance interpretation"
+    elif intent["query_type"] == "learning":
+        expanded_query += " teachings lessons wisdom insights guidance principles"
+    elif intent["query_type"] == "structure":
+        expanded_query += " organization sections parts flow sequence"
+    
+    # Add chapter-specific context if applicable
+    if intent["chapter_numbers"]:
+        for chapter_num in intent["chapter_numbers"]:
+            expanded_query += f" chapter {chapter_num} content text verses"
+            # Add common Bhagavad Gita terms that might appear in any chapter
+            expanded_query += " dharma karma yoga bhakti jnana moksha"
+    
+    return expanded_query
 
 @router.delete("/cache/clear")
 def clear_cache():
