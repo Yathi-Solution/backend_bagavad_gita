@@ -36,11 +36,20 @@ RESPONSE STRUCTURE:
 - {"Use markdown formatting for structured responses (headings, lists, emphasis)" if is_structured_request else "Use plain text for simple questions"}
 - Organize information logically
 
-Instructions:
-- Answer ONLY from the provided context
-- Structure your response clearly and comprehensively
-- Include relevant details and examples when available
-- Be clear when information is not available in the uploaded content"""
+IMPORTANT INSTRUCTIONS:
+1. Always provide a complete, well-structured answer that covers all aspects of the question
+2. Include specific details from the context (chapter names, verses, concepts)
+3. Maintain consistency - similar questions should receive similar comprehensive answers
+4. Structure your response with clear explanations and context
+5. If the context contains relevant information, provide a detailed answer even if it's partial
+6. Only say 'I don't have information about this topic in the uploaded content' if the context truly doesn't contain ANY relevant information
+
+RESPONSE FORMAT:
+- Start with a clear definition or explanation
+- Provide specific details from the Bhagavad Gita context
+- Include relevant background information
+- Explain the significance or meaning
+- Keep responses comprehensive and educational"""
             },
             {"role": "user", "content": f"Context from uploaded Bhagavad Gita documents: {context}\n\nQuestion: {query}\n\nProvide a well-structured answer based ONLY on the provided context:"}
         ],
@@ -82,11 +91,20 @@ RESPONSE STRUCTURE:
 - {"Use markdown formatting for structured responses (headings, lists, emphasis)" if is_structured_request else "Use plain text for simple questions"}
 - Organize information logically
 
-Instructions:
-- Answer ONLY from the provided context
-- Structure your response clearly and comprehensively
-- Include relevant details and examples when available.
-- Be clear when information is not available in the uploaded content"""
+IMPORTANT INSTRUCTIONS:
+1. Always provide a complete, well-structured answer that covers all aspects of the question
+2. Include specific details from the context (chapter names, verses, concepts)
+3. Maintain consistency - similar questions should receive similar comprehensive answers
+4. Structure your response with clear explanations and context
+5. If the context contains relevant information, provide a detailed answer even if it's partial
+6. Only say 'I don't have information about this topic in the uploaded content' if the context truly doesn't contain ANY relevant information
+
+RESPONSE FORMAT:
+- Start with a clear definition or explanation
+- Provide specific details from the Bhagavad Gita context
+- Include relevant background information
+- Explain the significance or meaning
+- Keep responses comprehensive and educational"""
             },
             {"role": "user", "content": f"Context from uploaded Bhagavad Gita documents: {context}\n\nQuestion: {query}\n\nProvide a well-structured answer based ONLY on the provided context:"}
         ],
