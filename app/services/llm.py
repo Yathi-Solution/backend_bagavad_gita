@@ -85,7 +85,7 @@ RESPONSE STRUCTURE:
 Instructions:
 - Answer ONLY from the provided context
 - Structure your response clearly and comprehensively
-- Include relevant details and examples when available
+- Include relevant details and examples when available.
 - Be clear when information is not available in the uploaded content"""
             },
             {"role": "user", "content": f"Context from uploaded Bhagavad Gita documents: {context}\n\nQuestion: {query}\n\nProvide a well-structured answer based ONLY on the provided context:"}
