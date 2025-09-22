@@ -8,6 +8,8 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import json
 from datetime import datetime
+import uuid
+import random
 
 load_dotenv()
 
@@ -20,10 +22,61 @@ class ChatRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
 
+# get_topics_response() function has been removed as per your request.
+    
+def get_no_knowledge_response(language: str, user_query: str) -> str:
+    """Dynamically generates a no-answer response with related topic suggestions using the LLM."""
+    try:
+        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        
+        
+        prompt = f"""The user asked a question in {language} about: "{user_query}". I couldn't find a direct answer in my knowledge base. Generate 3-4 related topics from the Bhagavad Gita that I can offer as suggestions. The topics should be general and inviting. Respond in the same language.
+        
+        Example in English:
+        Based on your question, I can tell you about:
+        - The nature of the soul (atman)
+        - The different paths of Yoga (Karma Yoga, Bhakti Yoga)
+        - Krishna's role as a divine guide
+        
+        Generate a similar response for the user's query in {language}.
+        """
+        
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=150,
+            temperature=0.7 # Higher temperature for more creative suggestions
+        )
+        
+        # Combine a generic apology with the LLM-generated suggestions
+        apology_responses = {
+            'english': "I apologize, but I couldn't find relevant information about this specific topic. However, I can help you with these related subjects:",
+            'hindi': "माफ़ करें, मुझे इस विशिष्ट विषय के बारे में प्रासंगिक जानकारी नहीं मिली। हालांकि, मैं आपको इन संबंधित विषयों में मदद कर सकता हूं:",
+            'telugu': "క్షమించండి, ఈ నిర్దిష్ట అంశం గురించి సంబంధిత సమాచారం నాకు దొరకలేదు. అయితే, ఈ సంబంధిత విషయాలతో నేను మీకు సహాయపడగలను:",
+            'kannada': "ಕ್ಷಮಿಸಿ, ಈ ನಿರ್ದಿಷ್ಟ ವಿಷಯದ ಬಗ್ಗೆ ನನಗೆ ಸಂಬಂಧಿತ ಮಾಹಿತಿ ಸಿಗಲಿಲ್ಲ. అయితే, ಈ ಸಂಬಂಧಿತ ವಿಷಯಗಳೊಂದಿಗೆ ನಾನು ನಿಮಗೆ ಸಹಾಯ ಮಾಡಬಹುದು:",
+            'marathi': "माफ करा, मला या विशिष्ट विषयाबद्दल संबंधित माहिती सापडली नाही. तरीही, मी तुम्हाला या संबंधित विषयांमध्ये मदत करू शकेन:"
+        }
+        apology = apology_responses.get(language, apology_responses['english'])
+        suggestions = response.choices[0].message.content.strip()
+        
+        return f"{apology}\n\n{suggestions}"
+    
+    except Exception:
+        # Fallback to a simple static response if LLM call fails
+        no_knowledge_responses = {
+            'english': "Sorry, I couldn't find the information you're looking for. Please try asking about a different topic from the Bhagavad Gita.",
+            'hindi': "क्षमा करें, मुझे वह जानकारी नहीं मिली जो आप ढूंढ रहे हैं। कृपया भगवद गीता के किसी अन्य विषय के बारे में पूछने का प्रयास करें।",
+            'telugu': "క్షమించండి, మీరు వెతుకుతున్న సమాచారం నాకు దొరకలేదు. దయచేసి భగవద్గీతలోని వేరే అంశం గురించి అడగడానికి ప్రయత్నించండి.",
+            'kannada': "ಕ್ಷಮಿಸಿ, ನೀವು ಹುಡುಕುತ್ತಿರುವ ಮಾಹಿತಿ ನನಗೆ ಸಿಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಭಗವದ್ಗೀತೆಯ ಬೇರೆ ವಿಷಯದ ಬಗ್ಗೆ ಕೇಳಲು ಪ್ರಯತ್ನಿಸಿ.",
+            'marathi': "माफ करा, मला तुम्ही शोधत असलेली माहिती सापडली नाही. कृपया भगवद्गीतेच्या दुसऱ्या विषयाबद्दल विचारण्याचा प्रयत्न करा."
+        }
+        return no_knowledge_responses.get(language, no_knowledge_responses['english'])
+
 def get_or_create_session_id(session_id: Optional[str]) -> str:
     """Get existing session_id or create a new one"""
     if not session_id:
-        import uuid
         session_id = str(uuid.uuid4())
     
     if session_id not in conversation_history:
@@ -49,7 +102,7 @@ def get_conversation_context(session_id: str, language: str) -> str:
     if session_id not in conversation_history or not conversation_history[session_id]:
         return ""
     
-    recent_turns = conversation_history[session_id][-4:]  # Last 4 turns for better performance
+    recent_turns = conversation_history[session_id][-4:]
     
     context_parts = []
     for turn in recent_turns:
@@ -58,7 +111,6 @@ def get_conversation_context(session_id: str, language: str) -> str:
     
     context = "\n".join(context_parts)
     
-    # Add language-specific instruction
     language_instructions = {
         'english': "Consider the previous conversation context when answering. Reference previous questions and answers when relevant.",
         'hindi': "पिछली बातचीत के संदर्भ को ध्यान में रखते हुए उत्तर दें। जब प्रासंगिक हो तो पिछले प्रश्नों और उत्तरों का संदर्भ दें।",
@@ -83,12 +135,8 @@ def get_structured_conversation_messages(session_id: str, language: str) -> list
         'marathi': "उत्तर देताना मागील संभाषणाचा विचार करा."
     }
     system_note = language_instructions.get(language, language_instructions['english'])
-
-    # Pull recent turns for continuity but keep cap reasonable for performance
     recent_turns = conversation_history[session_id][-4:]
-
     messages: list[Dict[str, str]] = []
-    # Add a lightweight system reminder specific to history consideration
     messages.append({"role": "system", "content": system_note})
     for turn in recent_turns:
         messages.append({"role": "user", "content": turn["user_query"]})
@@ -98,8 +146,6 @@ def get_structured_conversation_messages(session_id: str, language: str) -> list
 def detect_language_and_greeting(text: str) -> tuple[bool, str]:
     """Detect if text is a greeting and return the detected language"""
     text_lower = text.lower().strip()
-    
-    # Use LLM to detect if it's a greeting and what language
     try:
         openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         response = openai_client.chat.completions.create(
@@ -111,16 +157,12 @@ def detect_language_and_greeting(text: str) -> tuple[bool, str]:
                 },
                 {"role": "user", "content": text}
             ],
-            max_tokens=30,  # Reduced for faster response
-            temperature=0.1  # Lower temperature for faster, more consistent responses
+            max_tokens=30,
+            temperature=0.1
         )
-        
         result = response.choices[0].message.content.lower()
-        
-        # Parse the response
         is_greeting = "greeting:true" in result
-        language = "english"  # default
-        
+        language = "english"
         if "language:hindi" in result:
             language = "hindi"
         elif "language:telugu" in result:
@@ -129,20 +171,13 @@ def detect_language_and_greeting(text: str) -> tuple[bool, str]:
             language = "kannada"
         elif "language:marathi" in result:
             language = "marathi"
-        
         return is_greeting, language
-        
     except Exception:
-        # Fallback to simple pattern matching if LLM fails
         return detect_greeting_fallback(text)
-
-
 
 def detect_greeting_fallback(text: str) -> tuple[bool, str]:
     """Fallback greeting detection using simple patterns"""
     text_lower = text.lower().strip()
-    
-    # Simple greeting patterns
     greeting_patterns = [
         (r'\b(hi|hello|hey|good morning|good afternoon|good evening|how are you|how do you do|jai srimannarayana)\b', 'english'),
         (r'\b(namaste|namaskar|pranam|kaise ho|kaise hain|jai srimannarayana)\b', 'hindi'),
@@ -150,59 +185,41 @@ def detect_greeting_fallback(text: str) -> tuple[bool, str]:
         (r'\b(namaskara|howdu|chennagideya|jai srimannarayana)\b', 'kannada'),
         (r'\b(namaskar|kasa ahes|kasa aahes|jai srimannarayana)\b', 'marathi')
     ]
-    
     for pattern, language in greeting_patterns:
         if re.search(pattern, text_lower):
             return True, language
-    
-    # Detect language from content
     detected_language = detect_language_from_content(text)
     return False, detected_language
 
 def detect_language_from_content(text: str) -> str:
     """Detect language from text content using Unicode ranges and common words"""
     text_lower = text.lower()
-    
-    # Check for Telugu Unicode range (0C00-0C7F)
     if any('\u0c00' <= char <= '\u0c7f' for char in text):
         return 'telugu'
-    
-    # Check for Hindi/Devanagari Unicode range (0900-097F)
     if any('\u0900' <= char <= '\u097f' for char in text):
-        # Check for Marathi-specific words
         marathi_words = ['ahes', 'aahes', 'kasa', 'kase', 'kasa ahes', 'marathi', 'maharashtra']
         if any(word in text_lower for word in marathi_words):
             return 'marathi'
         return 'hindi'
-    
-    # Check for Kannada Unicode range (0C80-0CFF)
     if any('\u0c80' <= char <= '\u0cff' for char in text):
         return 'kannada'
-    
-    # Fallback to word-based detection for English text
     telugu_words = ['telugu', 'andhra', 'telangana', 'garu', 'unnaru', 'unnavu', 'ela', 'baga', 'bagunnara']
     if any(word in text_lower for word in telugu_words):
         return 'telugu'
-    
     kannada_words = ['kannada', 'karnataka', 'guru', 'deya', 'howdu', 'chennagi', 'chennagideya']
     if any(word in text_lower for word in kannada_words):
         return 'kannada'
-    
     hindi_words = ['hindi', 'hain', 'ho', 'aap', 'tum', 'kaise', 'kya', 'hai', 'kya hai']
     if any(word in text_lower for word in hindi_words):
         return 'hindi'
-    
     marathi_words = ['marathi', 'maharashtra', 'ahes', 'aahes', 'kasa', 'kase', 'kasa ahes']
     if any(word in text_lower for word in marathi_words):
         return 'marathi'
-    
-    # Default to English
     return 'english'
 
 def get_greeting_response(language: str, user_query: str = "") -> str:
     """Get natural greeting response in the detected language"""
     try:
-        # Use LLM to generate natural greeting response
         openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
@@ -213,13 +230,11 @@ def get_greeting_response(language: str, user_query: str = "") -> str:
                 },
                 {"role": "user", "content": user_query}
             ],
-            max_tokens=80,  # Reduced for faster response
-            temperature=0.3  # Lower temperature for faster, more consistent responses
+            max_tokens=80,
+            temperature=0.3
         )
         return response.choices[0].message.content
     except Exception:
-        # Fallback responses with multiple variations
-        import random
         responses = {
             'english': [
                 "Jai Srimannarayana! 🙏 I'm doing well, thank you for asking! How can I help you learn about the Bhagavad Gita today?",
@@ -260,58 +275,11 @@ def get_greeting_response(language: str, user_query: str = "") -> str:
         language_responses = responses.get(language, responses['english'])
         return random.choice(language_responses)
 
-def get_no_answer_response(language: str) -> str:
-    """Get natural no answer response in the detected language"""
-    import random
-    
-    responses = {
-        'english': [
-            "I apologize, but I couldn't find relevant information about this topic in the Bhagavad Gita transcripts. Could you try rephrasing your question or ask about something else?",
-            "Sorry, I don't have information about this specific topic in the Bhagavad Gita content I have access to. Perhaps you could ask about a different aspect of the Gita?",
-            "I'm afraid I couldn't locate relevant details about this topic in the Bhagavad Gita transcripts. Would you like to explore a different question about the Gita?",
-            "Unfortunately, I don't have the specific information you're looking for in the Bhagavad Gita content. Could you try asking about another topic from the Gita?",
-            "I couldn't find relevant information about this topic in the Bhagavad Gita transcripts. Feel free to ask about other aspects of Krishna's teachings!"
-        ],
-        'hindi': [
-            "माफ़ करें, मुझे भगवद गीता के प्रतिलेखों में इस विषय के बारे में प्रासंगिक जानकारी नहीं मिली। क्या आप अपना प्रश्न दोबारा बना सकते हैं या कुछ और पूछ सकते हैं?",
-            "क्षमा करें, मेरे पास भगवद गीता की सामग्री में इस विशिष्ट विषय की जानकारी नहीं है। शायद आप गीता के किसी अन्य पहलू के बारे में पूछ सकते हैं?",
-            "मुझे खेद है कि मैं भगवद गीता के प्रतिलेखों में इस विषय के बारे में प्रासंगिक विवरण नहीं ढूंढ सका। क्या आप गीता के बारे में कोई अन्य प्रश्न पूछना चाहेंगे?",
-            "दुर्भाग्य से, मेरे पास भगवद गीता की सामग्री में आप जो जानकारी चाहते हैं, वह नहीं है। क्या आप गीता के किसी अन्य विषय के बारे में पूछ सकते हैं?",
-            "मुझे भगवद गीता के प्रतिलेखों में इस विषय के बारे में प्रासंगिक जानकारी नहीं मिली। कृष्ण की शिक्षाओं के अन्य पहलुओं के बारे में पूछने के लिए स्वतंत्र महसूस करें!"
-        ],
-        'telugu': [
-            "క్షమించండి, భగవద్గీత ప్రతిలేఖాలలో ఈ అంశం గురించి సంబంధిత సమాచారం నాకు దొరకలేదు. మీరు మీ ప్రశ్నను మళ్లీ రూపొందించగలరా లేదా వేరేదైనా అడగగలరా?",
-            "క్షమించండి, నా వద్ద ఉన్న భగవద్గీత సమాచారంలో ఈ ప్రత్యేక అంశం గురించి సమాచారం లేదు. బహుశా మీరు గీత యొక్క వేరే అంశం గురించి అడగవచ్చు?",
-            "క్షమించండి, భగవద్గీత ప్రతిలేఖాలలో ఈ అంశం గురించి సంబంధిత వివరాలను నేను కనుగొనలేకపోయాను. మీరు గీత గురించి వేరే ప్రశ్న అడగాలనుకుంటున్నారా?",
-            "దురదృష్టవశాత్తు, నా వద్ద ఉన్న భగవద్గీత సమాచారంలో మీరు వెతుకుతున్న ప్రత్యేక సమాచారం లేదు. మీరు గీత యొక్క వేరే అంశం గురించి అడగవచ్చా?",
-            "భగవద్గీత ప్రతిలేఖాలలో ఈ అంశం గురించి సంబంధిత సమాచారం నాకు దొరకలేదు. కృష్ణుడి బోధనల యొక్క ఇతర అంశాల గురించి అడగడానికి స్వేచ్ఛగా ఉండండి!"
-        ],
-        'kannada': [
-            "ಕ್ಷಮಿಸಿ, ಭಗವದ್ಗೀತೆಯ ಪ್ರತಿಲೇಖಗಳಲ್ಲಿ ಈ ವಿಷಯದ ಬಗ್ಗೆ ಸಂಬಂಧಿತ ಮಾಹಿತಿಯನ್ನು ನಾನು ಕಂಡುಹಿಡಿಯಲಿಲ್ಲ. ನೀವು ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಮತ್ತೆ ರೂಪಿಸಬಹುದೇ ಅಥವಾ ಬೇರೆ ಯಾವುದಾದರೂ ಕೇಳಬಹುದೇ?",
-            "ಕ್ಷಮಿಸಿ, ನನ್ನಲ್ಲಿರುವ ಭಗವದ್ಗೀತೆಯ ವಿಷಯದಲ್ಲಿ ಈ ನಿರ್ದಿಷ್ಟ ವಿಷಯದ ಬಗ್ಗೆ ಮಾಹಿತಿ ಇಲ್ಲ. ಬಹುಶಃ ನೀವು ಗೀತೆಯ ಇತರ ಅಂಶಗಳ ಬಗ್ಗೆ ಕೇಳಬಹುದು?",
-            "ಕ್ಷಮಿಸಿ, ಭಗವದ್ಗೀತೆಯ ಪ್ರತಿಲೇಖಗಳಲ್ಲಿ ಈ ವಿಷಯದ ಬಗ್ಗೆ ಸಂಬಂಧಿತ ವಿವರಗಳನ್ನು ನಾನು ಕಂಡುಹಿಡಿಯಲಿಲ್ಲ. ನೀವು ಗೀತೆಯ ಬಗ್ಗೆ ಬೇರೆ ಪ್ರಶ್ನೆ ಕೇಳಲು ಬಯಸುತ್ತೀರಾ?",
-            "ದುರದೃಷ್ಟವಶಾತ್, ನನ್ನಲ್ಲಿರುವ ಭಗವದ್ಗೀತೆಯ ವಿಷಯದಲ್ಲಿ ನೀವು ಹುಡುಕುತ್ತಿರುವ ನಿರ್ದಿಷ್ಟ ಮಾಹಿತಿ ಇಲ್ಲ. ನೀವು ಗೀತೆಯ ಬೇರೆ ವಿಷಯದ ಬಗ್ಗೆ ಕೇಳಬಹುದೇ?",
-            "ಭಗವದ್ಗೀತೆಯ ಪ್ರತಿಲೇಖಗಳಲ್ಲಿ ಈ ವಿಷಯದ ಬಗ್ಗೆ ಸಂಬಂಧಿತ ಮಾಹಿತಿಯನ್ನು ನಾನು ಕಂಡುಹಿಡಿಯಲಿಲ್ಲ. ಕೃಷ್ಣನ ಬೋಧನೆಗಳ ಇತರ ಅಂಶಗಳ ಬಗ್ಗೆ ಕೇಳಲು ಸ್ವತಂತ್ರವಾಗಿ ಇರಿ!"
-        ],
-        'marathi': [
-            "माफ करा, भगवद्गीता प्रतिलेखांमध्ये या विषयाबद्दल संबंधित माहिती मला सापडली नाही. तुम्ही तुमचा प्रश्न पुन्हा तयार करू शकता का किंवा काहीतरी वेगळे विचारू शकता का?",
-            "माफ करा, माझ्याकडे असलेल्या भगवद्गीता सामग्रीत या विशिष्ट विषयाबद्दल माहिती नाही. कदाचित तुम्ही गीतेच्या दुसऱ्या पैलूबद्दल विचारू शकता?",
-            "माझी खेद आहे की मी भगवद्गीता प्रतिलेखांमध्ये या विषयाबद्दल संबंधित तपशील शोधू शकलो नाही. तुम्ही गीतेबद्दल दुसरा प्रश्न विचारू इच्छिता का?",
-            "दुर्दैवाने, माझ्याकडे असलेल्या भगवद्गीता सामग्रीत तुम्ही शोधत असलेली विशिष्ट माहिती नाही. तुम्ही गीतेच्या दुसऱ्या विषयाबद्दल विचारू शकता का?",
-            "मला भगवद्गीता प्रतिलेखांमध्ये या विषयाबद्दल संबंधित माहिती सापडली नाही. कृष्णाच्या शिकवणींच्या इतर पैलूंबद्दल विचारण्यासाठी मोकळेपणाने वाट पहा!"
-        ]
-    }
-    
-    language_responses = responses.get(language, responses['english'])
-    return random.choice(language_responses)
-
 @router.post("/")
 def chat_post(request: ChatRequest, fastapi_request: Request, fastapi_response: Response):
     """Chat endpoint that accepts POST requests with JSON body"""
-    # Prefer explicit session_id, then header, then cookie
     incoming_session_id = request.session_id or fastapi_request.headers.get("X-Session-Id") or fastapi_request.cookies.get("session_id")
     result = process_chat_query(request.query, incoming_session_id)
-    # Persist session in cookie for continuity when client doesn't send it explicitly
     if result and isinstance(result, dict) and result.get("session_id"):
         fastapi_response.set_cookie(
             key="session_id",
@@ -348,19 +316,15 @@ def process_chat_query(query: str, session_id: Optional[str] = None):
         if not query.strip():
             raise HTTPException(status_code=400, detail="Query cannot be empty")
         
-        # Get or create session ID for conversation tracking
         session_id = get_or_create_session_id(session_id)
         
-        # Detect language and check if it's a greeting
-        is_greeting_detected, detected_language = detect_language_and_greeting(query)
+        # The topics_keywords and corresponding if block have been removed
         
-        # Get conversation context
+        is_greeting_detected, detected_language = detect_language_and_greeting(query)
         conversation_context = get_conversation_context(session_id, detected_language)
         
-        # Check if it's a greeting first
         if is_greeting_detected:
             answer = get_greeting_response(detected_language, query)
-            # Add to conversation history
             add_to_conversation_history(session_id, query, answer, detected_language)
             return {
                 "answer": answer,
@@ -369,20 +333,17 @@ def process_chat_query(query: str, session_id: Optional[str] = None):
                 "session_id": session_id
             }
         
-        # Generate embedding for the query augmented with recent conversation context
         augmented_query = f"{conversation_context}\nCurrent Question: {query}" if conversation_context else query
         query_vector = embeddings.embed_text(augmented_query)
         
-        # Search for similar chunks in Pinecone
         results = pinecone_client.index.query(
             vector=query_vector,
-            top_k=3,  # Reduced for faster response
+            top_k=3,
             include_metadata=True
         )
 
-        if not results.matches or results.matches[0].score < 0.5:  # Lowered threshold slightly
-            answer = get_no_answer_response(detected_language)
-            # Add to conversation history
+        if not results.matches or results.matches[0].score < 0.5:
+            answer = get_no_knowledge_response(detected_language, query)
             add_to_conversation_history(session_id, query, answer, detected_language)
             return {
                 "answer": answer,
@@ -390,39 +351,50 @@ def process_chat_query(query: str, session_id: Optional[str] = None):
                 "sources": [],
                 "session_id": session_id
             }
-
-        # Prepare context from top matches
+        
         context_chunks = []
         for match in results.matches:
-            if match.score > 0.4:  # Lowered threshold for more context
+            if match.score > 0.4:
                 context_chunks.append({
                     "text": match.metadata["text"],
                     "chunk_id": match.metadata.get("chunk_id", "unknown"),
                     "score": match.score
                 })
         
-        # Create context string
         context = " ".join([chunk["text"] for chunk in context_chunks])
         
-        # Generate answer using LLM with language instruction and structured conversation history
         structured_messages = get_structured_conversation_messages(session_id, detected_language)
-        answer = llm.generate_answer_with_language_structured(
+        raw_response = llm.generate_answer_with_language_structured(
             query=query,
             context=context,
             language=detected_language,
             history_messages=structured_messages
         )
         
-        # Add to conversation history
-        add_to_conversation_history(session_id, query, answer, detected_language)
+        try:
+            llm_response_data = json.loads(raw_response)
+            thought = llm_response_data.get("thought", "No thought process available.")
+            answer = llm_response_data.get("answer", "No answer could be generated.")
+            
+            add_to_conversation_history(session_id, query, answer, detected_language)
+            
+            return {
+                "thought": thought,
+                "answer": answer,
+                "confidence": results.matches[0].score,
+                "sources": context_chunks[:3],
+                "session_id": session_id
+            }
         
-        return {
-            "answer": answer,
-            "confidence": results.matches[0].score,
-            "sources": context_chunks[:3],  # Return top 3 sources
-            "session_id": session_id
-        }
-        
+        except json.JSONDecodeError:
+            add_to_conversation_history(session_id, query, raw_response, detected_language)
+            return {
+                "answer": "Sorry, an internal error occurred. Please try again.",
+                "confidence": 0.0,
+                "sources": [],
+                "session_id": session_id
+            }
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
 
@@ -432,7 +404,6 @@ def get_chat_history(session_id: str = Query(..., description="Session ID to ret
     if session_id not in conversation_history:
         return {"history": []}
     
-    # Return last 10 conversation turns
     history = conversation_history[session_id][-10:]
     return {"history": history}
 
