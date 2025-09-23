@@ -67,7 +67,7 @@ def _save_to_supabase(record: Dict[str, Any]) -> None:
 
 @router.post("/rate", response_model=ShouldAskResponse)
 def rate(request: RatingRequest):
-    """Record a rating and tell the client whether to ask for feedback text."""
+    """Record a rating and tell the client whether to ask for feedback text.."""
     # Ensure mandatory query_text for DB NOT NULL; try to derive from last turn or metadata
     query_text = None
     answer_text = None
