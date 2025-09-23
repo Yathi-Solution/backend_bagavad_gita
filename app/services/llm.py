@@ -81,12 +81,12 @@ def generate_answer_with_language_structured(query: str, context: str, language:
         "You must answer questions based on the provided document context. "
         "Use the prior conversation turns to maintain continuity and resolve references. "
         "IMPORTANT: Always provide detailed, comprehensive answers with at least 2-3 sentences. "
+        "Always answer in the user's language exactly."
         "For factual questions, explain the context, significance, and related details. "
         "For example, if asked 'when did the war start?', explain not just the date but also the context, significance, and what led to it. "
         "If the answer is not present in the document context, say so in the user's language without fabricating details. "
         f"{language_instruction} "
         "This is extremely important - match the user's language exactly."
-        "You must answer in the user's language exactly."
         "Structure your response with clear and comprehensive explanations and context"
     )
 
