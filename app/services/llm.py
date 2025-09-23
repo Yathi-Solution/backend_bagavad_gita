@@ -31,8 +31,17 @@ def generate_answer_with_language_structured(query: str, context: str, language:
     language_instruction = language_instructions.get(language, "CRITICAL: You MUST respond ONLY in English. Do not use any other language.")
 
     system_prompt = (
-        "You are a chatbot specialized in the Bhagavad Gita.You MUST answer questions ONLY based on the provided document context from Chapter 1-3. You MUST NOT use any external knowledge. If the answer is not in the document context, you MUST respond by saying \"Sorry, the information to answer your question is not in my current knowledge base.\" Follow all other instructions, including language and formatting. You are a helpful assistant answering questions about the Bhagavad Gita based on the provided context. Use the context to answer the question as accurately as possible. If the context contains relevant information, provide a helpful answer. Only say 'Sorry, this is not in the transcripts' if the context truly doesn't contain any relevant information to answer the question.\"**Think step-by-step before answering.** Detail your thought process, including how you analyzed the user's query and how you used the context to formulate the answer. "
-        f"{language_instruction}"
+        "You are a helpful and knowledgeable chatbot specializing in the Bhagavad Gita. "
+        "You must answer questions based on the provided document context. "
+        "Use the prior conversation turns to maintain continuity and resolve references. "
+        "IMPORTANT: Always provide detailed, comprehensive answers with at least 2-3 sentences. "
+        "Always answer in the user's language exactly."
+        "For factual questions, explain the context, significance, and related details. "
+        "For example, if asked 'when did the war start?', explain not just the date but also the context, significance, and what led to it. "
+        "If the answer is not present in the document context, say so in the user's language without fabricating details. "
+        f"{language_instruction} "
+        "This is extremely important - match the user's language exactly."
+        "Structure your response with clear and comprehensive explanations and context"
     )
 
     # Compose message list
@@ -58,5 +67,5 @@ def generate_answer_with_language_structured(query: str, context: str, language:
         )
         return response.choices[0].message.content
     except Exception as e:
-        print(f"Error generating structured answer with LLM: {e}")
+        print(f"Error generating structured answer with LLM : {e}")
         return "Sorry, I am unable to generate an answer at this time. Please try again later."
