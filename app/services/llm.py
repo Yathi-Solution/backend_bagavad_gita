@@ -113,5 +113,5 @@ def generate_answer_with_language_structured(query: str, context: str, language:
         )
         return response.choices[0].message.content
     except Exception as e:
-        print(f"Error generating structured answer with LLM: {e}")
+        print(f"Error generating structured answer with LLM : {e}")
         return "Sorry, I am unable to generate an answer at this time. Please try again later."
