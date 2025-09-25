@@ -369,39 +369,37 @@ def process_chat_query(query: str, session_id: Optional[str] = None):
         context = " ".join([chunk["text"] for chunk in context_chunks])
         
         structured_messages = get_structured_conversation_messages(session_id, detected_language)
-        raw_response = llm.generate_answer_with_language_structured(
+        answer = llm.generate_answer_with_language_structured(
             query=query,
             context=context,
             language=detected_language,
             history_messages=structured_messages
         )
         
-        try:
-            llm_response_data = json.loads(raw_response)
-            thought = llm_response_data.get("thought", "No thought process available.")
-            answer = llm_response_data.get("answer", "No answer could be generated.")
-            
-            add_to_conversation_history(session_id, query, answer, detected_language)
-            
-            return {
-                "thought": thought,
-                "answer": answer,
-                "confidence": results.matches[0].score,
-                "sources": context_chunks[:3],
-                "session_id": session_id
-            }
+        # Add to conversation history
+        add_to_conversation_history(session_id, query, answer, detected_language)
         
-        except json.JSONDecodeError:
-            add_to_conversation_history(session_id, query, raw_response, detected_language)
-            return {
-                "answer": "Sorry, an internal error occurred. Please try again.",
-                "confidence": 0.0,
-                "sources": [],
-                "session_id": session_id
-            }
+        return {
+            "answer": answer,
+            "confidence": results.matches[0].score,
+            "sources": context_chunks[:3],
+            "session_id": session_id
+        }
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
+        # Log the error for debugging
+        print(f"Error in process_chat_query: {str(e)}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        
+        # Return a more informative error response
+        return {
+            "answer": f"Sorry, an error occurred while processing your query: {str(e)}",
+            "confidence": 0.0,
+            "sources": [],
+            "session_id": session_id if 'session_id' in locals() else "error"
+        }
 
 @router.get("/history")
 def get_chat_history(session_id: str = Query(..., description="Session ID to retrieve history for")):
@@ -416,3 +414,53 @@ def get_chat_history(session_id: str = Query(..., description="Session ID to ret
 def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "message": "Chat service is running"}
+
+@router.get("/debug")
+def debug_endpoint():
+    """Debug endpoint to check service status and identify issues"""
+    debug_info = {
+        "status": "debug",
+        "environment_check": {},
+        "service_status": {},
+        "error_details": []
+    }
+    
+    try:
+        # Check environment variables
+        debug_info["environment_check"] = {
+            "openai_key_set": bool(os.getenv("OPENAI_API_KEY")),
+            "pinecone_key_set": bool(os.getenv("PINECONE_API_KEY")),
+            "pinecone_index": os.getenv("PINECONE_INDEX", "not_set"),
+            "supabase_url_set": bool(os.getenv("SUPABASE_URL")),
+            "supabase_key_set": bool(os.getenv("SUPABASE_ANON_KEY"))
+        }
+        
+        # Test Pinecone connection
+        try:
+            pinecone_status = pinecone_client.index.describe_index_stats()
+            debug_info["service_status"]["pinecone"] = "connected"
+            debug_info["service_status"]["pinecone_vector_count"] = pinecone_status.total_vector_count
+        except Exception as e:
+            debug_info["service_status"]["pinecone"] = f"error: {str(e)}"
+            debug_info["error_details"].append(f"Pinecone error: {str(e)}")
+        
+        # Test OpenAI connection
+        try:
+            test_embedding = embeddings.embed_text("test")
+            debug_info["service_status"]["openai_embeddings"] = "working"
+        except Exception as e:
+            debug_info["service_status"]["openai_embeddings"] = f"error: {str(e)}"
+            debug_info["error_details"].append(f"OpenAI embeddings error: {str(e)}")
+        
+        # Test LLM
+        try:
+            test_response = llm.generate_answer("test", "test context")
+            debug_info["service_status"]["openai_llm"] = "working"
+        except Exception as e:
+            debug_info["service_status"]["openai_llm"] = f"error: {str(e)}"
+            debug_info["error_details"].append(f"OpenAI LLM error: {str(e)}")
+            
+    except Exception as e:
+        debug_info["error_details"].append(f"General error: {str(e)}")
+    
+    return debug_info
