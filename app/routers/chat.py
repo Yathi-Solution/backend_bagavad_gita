@@ -50,15 +50,30 @@ def get_no_knowledge_response(language: str, user_query: str) -> str:
             temperature=0.7 # Higher temperature for more creative suggestions
         )
         
-        # Combine a generic apology with the LLM-generated suggestions
+        # Combine a random apology with the LLM-generated suggestions
         apology_responses = {
-            'english': "I apologize, but I couldn't find relevant information about this specific topic. However, I can help you with these related subjects:",
-            'hindi': "माफ़ करें, मुझे इस विशिष्ट विषय के बारे में प्रासंगिक जानकारी नहीं मिली। हालांकि, मैं आपको इन संबंधित विषयों में मदद कर सकता हूं:",
-            'telugu': "క్షమించండి, ఈ నిర్దిష్ట అంశం గురించి సంబంధిత సమాచారం నాకు దొరకలేదు. అయితే, ఈ సంబంధిత విషయాలతో నేను మీకు సహాయపడగలను:",
-            'kannada': "ಕ್ಷಮಿಸಿ, ಈ ನಿರ್ದಿಷ್ಟ ವಿಷಯದ ಬಗ್ಗೆ ನನಗೆ ಸಂಬಂಧಿತ ಮಾಹಿತಿ ಸಿಗಲಿಲ್ಲ. అయితే, ಈ ಸಂಬಂಧಿತ ವಿಷಯಗಳೊಂದಿಗೆ ನಾನು ನಿಮಗೆ ಸಹಾಯ ಮಾಡಬಹುದು:",
-            'marathi': "माफ करा, मला या विशिष्ट विषयाबद्दल संबंधित माहिती सापडली नाही. तरीही, मी तुम्हाला या संबंधित विषयांमध्ये मदत करू शकेन:"
+            'english': [
+                "Sorry, I couldn't find verses for that. Maybe try asking in another way?",
+                "Hmm, I don't see a reference for that. Want me to share something related instead?",
+                "Apologies 🙏, I don't have that exact answer. But I can guide you with related wisdom.",
+                "Sorry, I couldn't find that specific information. However, I can help you with these related subjects:",
+                "I apologize, but I couldn't find relevant information about this specific topic. However, I can help you with these related subjects:",
+                "Sorry, I don't have that exact answer in my knowledge base. But I can tell you about these related topics:",
+                "Hmm, I couldn't find that specific reference. Want to explore these related concepts instead?",
+                "Sorry, I couldn't find the information you're looking for. But I can help you with these related subjects:"
+            ],
+            'telugu': [
+                "క్షమించండి, ఈ నిర్దిష్ట అంశం గురించి సంబంధిత సమాచారం నాకు దొరకలేదు. అయితే, ఈ సంబంధిత విషయాలతో నేను మీకు సహాయపడగలను:",
+                "క్షమించండి, మీరు వెతుకుతున్న సమాచారం నాకు దొరకలేదు. దయచేసి భగవద్గీతలోని వేరే అంశం గురించి అడగడానికి ప్రయత్నించండి.",
+                "క్షమించండి, నాకు ఆ నిర్దిష్ట సమాధానం లేదు. కానీ ఈ సంబంధిత అంశాల గురించి చెప్పగలను:",
+                "క్షమించండి, నాకు ఆ సమాచారం దొరకలేదు. కానీ ఈ సంబంధిత విషయాలతో సహాయపడగలను:",
+                "క్షమించండి, నాకు ఆ నిర్దిష్ట సమాచారం లేదు. కానీ ఈ సంబంధిత అంశాల గురించి చెప్పగలను:",
+                "క్షమించండి, నాకు ఆ సమాధానం దొరకలేదు. కానీ ఈ సంబంధిత అంశాల గురించి చెప్పగలను:",
+                "క్షమించండి, నాకు ఆ సమాచారం లేదు. కానీ ఈ సంబంధిత విషయాలతో సహాయపడగలను:",
+                "క్షమించండి, నాకు ఆ నిర్దిష్ట సమాధానం లేదు. కానీ ఈ సంబంధిత అంశాల గురించి చెప్పగలను:"
+            ]
         }
-        apology = apology_responses.get(language, apology_responses['english'])
+        apology = random.choice(apology_responses.get(language, apology_responses['english']))
         suggestions = response.choices[0].message.content.strip()
         
         return f"{apology}\n\n{suggestions}"
@@ -66,13 +81,28 @@ def get_no_knowledge_response(language: str, user_query: str) -> str:
     except Exception:
         # Fallback to a simple static response if LLM call fails
         no_knowledge_responses = {
-            'english': "Sorry, I couldn't find the information you're looking for. Please try asking about a different topic from the Bhagavad Gita.",
-            'hindi': "क्षमा करें, मुझे वह जानकारी नहीं मिली जो आप ढूंढ रहे हैं। कृपया भगवद गीता के किसी अन्य विषय के बारे में पूछने का प्रयास करें।",
-            'telugu': "క్షమించండి, మీరు వెతుకుతున్న సమాచారం నాకు దొరకలేదు. దయచేసి భగవద్గీతలోని వేరే అంశం గురించి అడగడానికి ప్రయత్నించండి.",
-            'kannada': "ಕ್ಷಮಿಸಿ, ನೀವು ಹುಡುಕುತ್ತಿರುವ ಮಾಹಿತಿ ನನಗೆ ಸಿಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಭಗವದ್ಗೀತೆಯ ಬೇರೆ ವಿಷಯದ ಬಗ್ಗೆ ಕೇಳಲು ಪ್ರಯತ್ನಿಸಿ.",
-            'marathi': "माफ करा, मला तुम्ही शोधत असलेली माहिती सापडली नाही. कृपया भगवद्गीतेच्या दुसऱ्या विषयाबद्दल विचारण्याचा प्रयत्न करा."
+            'english': [
+                "Sorry, I couldn't find the information you're looking for. Please try asking about a different topic from the Bhagavad Gita.",
+                "I apologize, but I don't have that information in my knowledge base. Please try asking about another topic from the Gita.",
+                "Sorry, I couldn't find that specific answer. Please try asking about a different aspect of the Bhagavad Gita.",
+                "I don't have that information available. Please try asking about another topic from the Bhagavad Gita.",
+                "Sorry, I couldn't find that in my knowledge base. Please try asking about a different topic from the Gita.",
+                "I apologize, but I don't have that specific information. Please try asking about another aspect of the Bhagavad Gita.",
+                "Sorry, I couldn't find that answer. Please try asking about a different topic from the Bhagavad Gita.",
+                "I don't have that information. Please try asking about another topic from the Gita."
+            ],
+            'telugu': [
+                "క్షమించండి, మీరు వెతుకుతున్న సమాచారం నాకు దొరకలేదు. దయచేసి భగవద్గీతలోని వేరే అంశం గురించి అడగడానికి ప్రయత్నించండి.",
+                "క్షమించండి, నాకు ఆ సమాచారం లేదు. దయచేసి భగవద్గీతలోని వేరే అంశం గురించి అడగండి.",
+                "క్షమించండి, నాకు ఆ సమాధానం లేదు. దయచేసి భగవద్గీతలోని వేరే అంశం గురించి అడగండి.",
+                "నాకు ఆ సమాచారం లేదు. దయచేసి భగవద్గీతలోని వేరే అంశం గురించి అడగండి.",
+                "క్షమించండి, నాకు ఆ సమాచారం లేదు. దయచేసి భగవద్గీతలోని వేరే అంశం గురించి అడగండి.",
+                "క్షమించండి, నాకు ఆ సమాధానం లేదు. దయచేసి భగవద్గీతలోని వేరే అంశం గురించి అడగండి.",
+                "క్షమించండి, నాకు ఆ సమాచారం లేదు. దయచేసి భగవద్గీతలోని వేరే అంశం గురించి అడగండి.",
+                "నాకు ఆ సమాచారం లేదు. దయచేసి భగవద్గీతలోని వేరే అంశం గురించి అడగండి."
+            ]
         }
-        return no_knowledge_responses.get(language, no_knowledge_responses['english'])
+        return random.choice(no_knowledge_responses.get(language, no_knowledge_responses['english']))
 
 def get_or_create_session_id(session_id: Optional[str]) -> str:
     """Get existing session_id or create a new one"""
@@ -102,7 +132,7 @@ def get_conversation_context(session_id: str, language: str) -> str:
     if session_id not in conversation_history or not conversation_history[session_id]:
         return ""
     
-    recent_turns = conversation_history[session_id][-4:]
+    recent_turns = conversation_history[session_id][-7:]
     
     context_parts = []
     for turn in recent_turns:
@@ -113,10 +143,7 @@ def get_conversation_context(session_id: str, language: str) -> str:
     
     language_instructions = {
         'english': "Consider the previous conversation context when answering. Reference previous questions and answers when relevant.",
-        'hindi': "पिछली बातचीत के संदर्भ को ध्यान में रखते हुए उत्तर दें। जब प्रासंगिक हो तो पिछले प्रश्नों और उत्तरों का संदर्भ दें।",
-        'telugu': "మునుపటి సంభాషణ సందర్భాన్ని పరిగణనలోకి తీసుకొని జవాబు ఇవ్వండి. సంబంధితమైనప్పుడు మునుపటి ప్రశ్నలు మరియు జవాబులను సూచించండి.",
-        'kannada': "ಹಿಂದಿನ ಸಂಭಾಷಣೆಯ ಸಂದರ್ಭವನ್ನು ಪರಿಗಣಿಸಿ ಉತ್ತರಿಸಿ. ಸಂಬಂಧಿತವಾದಾಗ ಹಿಂದಿನ ಪ್ರಶ್ನೆಗಳು ಮತ್ತು ಉತ್ತರಗಳನ್ನು ಉಲ್ಲೇಖಿಸಿ.",
-        'marathi': "मागील संभाषणाचा संदर्भ लक्षात घेऊन उत्तर द्या. प्रासंगिक असल्यास मागील प्रश्न आणि उत्तरांचा संदर्भ द्या."
+        'telugu': "మునుపటి సంభాషణ సందర్భాన్ని పరిగణనలోకి తీసుకొని జవాబు ఇవ్వండి. సంబంధితమైనప్పుడు మునుపటి ప్రశ్నలు మరియు జవాబులను సూచించండి."
     }
     
     instruction = language_instructions.get(language, language_instructions['english'])
@@ -129,13 +156,10 @@ def get_structured_conversation_messages(session_id: str, language: str) -> list
 
     language_instructions = {
         'english': "Consider the prior conversation turns when answering.",
-        'hindi': "उत्तर देते समय पिछली बातचीत को ध्यान में रखें।",
-        'telugu': "మునుపటి సంభాషణను పరిగణనలోకి తీసుకోండి.",
-        'kannada': "ಹಿಂದಿನ ಸಂಭಾಷಣೆಯನ್ನು ಪರಿಗಣಿಸಿ.",
-        'marathi': "उत्तर देताना मागील संभाषणाचा विचार करा."
+        'telugu': "మునుపటి సంభాషణను పరిగణనలోకి తీసుకోండి."
     }
     system_note = language_instructions.get(language, language_instructions['english'])
-    recent_turns = conversation_history[session_id][-4:]
+    recent_turns = conversation_history[session_id][-7:]
     messages: list[Dict[str, str]] = []
     messages.append({"role": "system", "content": system_note})
     for turn in recent_turns:
@@ -144,7 +168,7 @@ def get_structured_conversation_messages(session_id: str, language: str) -> list
     return messages
 
 def detect_language_and_greeting(text: str) -> tuple[bool, str]:
-    """Detect if text is a greeting and return the detected language"""
+    """Detect if text is a greeting and return the detected language (English/Telugu only)"""
     text_lower = text.lower().strip()
     try:
         openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -153,7 +177,7 @@ def detect_language_and_greeting(text: str) -> tuple[bool, str]:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a language detection expert. Analyze the given text and determine: 1) Is this a greeting or casual conversation starter? 2) What language is it in? Respond with only: GREETING:true/false,LANGUAGE:english/hindi/telugu/kannada/marathi"
+                    "content": "You are a language detection expert. Analyze the given text and determine: 1) Is this a greeting or casual conversation starter? 2) What language is it in? Respond with only: GREETING:true/false,LANGUAGE:english/telugu. If the text is in Hindi, Kannada, Marathi, or any other language, respond with LANGUAGE:english."
                 },
                 {"role": "user", "content": text}
             ],
@@ -163,27 +187,18 @@ def detect_language_and_greeting(text: str) -> tuple[bool, str]:
         result = response.choices[0].message.content.lower()
         is_greeting = "greeting:true" in result
         language = "english"
-        if "language:hindi" in result:
-            language = "hindi"
-        elif "language:telugu" in result:
+        if "language:telugu" in result:
             language = "telugu"
-        elif "language:kannada" in result:
-            language = "kannada"
-        elif "language:marathi" in result:
-            language = "marathi"
         return is_greeting, language
     except Exception:
         return detect_greeting_fallback(text)
 
 def detect_greeting_fallback(text: str) -> tuple[bool, str]:
-    """Fallback greeting detection using simple patterns"""
+    """Fallback greeting detection using simple patterns (English/Telugu only)"""
     text_lower = text.lower().strip()
     greeting_patterns = [
         (r'\b(hi|hello|hey|good morning|good afternoon|good evening|how are you|how do you do|jai srimannarayana)\b', 'english'),
-        (r'\b(namaste|namaskar|pranam|kaise ho|kaise hain|jai srimannarayana)\b', 'hindi'),
-        (r'\b(namaskaram|namaskaramu|bagunnara|ela unnaru|ela unnavu|jai srimannarayana)\b', 'telugu'),
-        (r'\b(namaskara|howdu|chennagideya|jai srimannarayana)\b', 'kannada'),
-        (r'\b(namaskar|kasa ahes|kasa aahes|jai srimannarayana)\b', 'marathi')
+        (r'\b(namaskaram|namaskaramu|bagunnara|ela unnaru|ela unnavu|jai srimannarayana)\b', 'telugu')
     ]
     for pattern, language in greeting_patterns:
         if re.search(pattern, text_lower):
@@ -192,33 +207,32 @@ def detect_greeting_fallback(text: str) -> tuple[bool, str]:
     return False, detected_language
 
 def detect_language_from_content(text: str) -> str:
-    """Detect language from text content using Unicode ranges and common words"""
+    """Detect language from text content using Unicode ranges and common words (English/Telugu only)"""
     text_lower = text.lower()
     if any('\u0c00' <= char <= '\u0c7f' for char in text):
         return 'telugu'
-    if any('\u0900' <= char <= '\u097f' for char in text):
-        marathi_words = ['ahes', 'aahes', 'kasa', 'kase', 'kasa ahes', 'marathi', 'maharashtra']
-        if any(word in text_lower for word in marathi_words):
-            return 'marathi'
-        return 'hindi'
-    if any('\u0c80' <= char <= '\u0cff' for char in text):
-        return 'kannada'
     telugu_words = ['telugu', 'andhra', 'telangana', 'garu', 'unnaru', 'unnavu', 'ela', 'baga', 'bagunnara']
     if any(word in text_lower for word in telugu_words):
         return 'telugu'
-    kannada_words = ['kannada', 'karnataka', 'guru', 'deya', 'howdu', 'chennagi', 'chennagideya']
-    if any(word in text_lower for word in kannada_words):
-        return 'kannada'
-    hindi_words = ['hindi', 'hain', 'ho', 'aap', 'tum', 'kaise', 'kya', 'hai', 'kya hai']
-    if any(word in text_lower for word in hindi_words):
-        return 'hindi'
-    marathi_words = ['marathi', 'maharashtra', 'ahes', 'aahes', 'kasa', 'kase', 'kasa ahes']
-    if any(word in text_lower for word in marathi_words):
-        return 'marathi'
+    # For any other language (Hindi, Kannada, Marathi, etc.), default to English
     return 'english'
 
+def get_language_restriction_response() -> str:
+    """Get a polite response when user queries in unsupported language"""
+    apology_variations = [
+        "Sorry, I can only reply in English or Telugu right now. Please try asking your question in one of these languages! 😊",
+        "I apologize, but I'm currently limited to English and Telugu responses. Could you please rephrase your question in one of these languages? 🙏",
+        "Sorry, I can only communicate in English or Telugu at the moment. Feel free to ask your Bhagavad Gita question in either language! 😊",
+        "I'd love to help, but I can only respond in English or Telugu right now. Please try your question in one of these languages! 🙏",
+        "Sorry, I can only reply in English or Telugu currently. Please ask your question in one of these languages and I'll be happy to help! 😊",
+        "I apologize, but I'm only able to respond in English or Telugu. Could you please ask your question in one of these languages? 🙏",
+        "Sorry, I can only help in English or Telugu right now. Please rephrase your question in one of these languages! 😊",
+        "I'd be happy to assist, but I can only reply in English or Telugu. Please try asking your question in one of these languages! 🙏"
+    ]
+    return random.choice(apology_variations)
+
 def get_greeting_response(language: str, user_query: str = "") -> str:
-    """Get natural greeting response in the detected language"""
+    """Get natural greeting response in the detected language (English/Telugu only)"""
     try:
         openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         response = openai_client.chat.completions.create(
@@ -243,33 +257,12 @@ def get_greeting_response(language: str, user_query: str = "") -> str:
                 "Jai Srimannarayana! 🙏 I'm doing great! What questions do you have about Krishna's wisdom in the Gita?",
                 "Jai Srimannarayana! 🙏 Everything is wonderful, thank you! How can I help you explore the Bhagavad Gita today?"
             ],
-            'hindi': [
-                "जय श्रीमन्नारायण! 🙏 मैं ठीक हूं, पूछने के लिए धन्यवाद! मैं आपको भगवद गीता के बारे में सीखने में कैसे मदद कर सकता हूं?",
-                "जय श्रीमन्नारायण! 🙏 मैं अच्छा हूं, आपकी चिंता के लिए धन्यवाद! भगवद गीता के बारे में आप क्या जानना चाहते हैं?",
-                "जय श्रीमन्नारायण! 🙏 सब कुछ ठीक है, धन्यवाद! मैं आपकी भगवद गीता की शिक्षाओं में कैसे सहायता कर सकता हूं?",
-                "जय श्रीमन्नारायण! 🙏 मैं बहुत अच्छा हूं! गीता में कृष्ण की बुद्धिमत्ता के बारे में आपके क्या प्रश्न हैं?",
-                "जय श्रीमन्नारायण! 🙏 सब कुछ शानदार है, धन्यवाद! आज भगवद गीता का अन्वेषण करने में मैं आपकी कैसे मदद कर सकता हूं?"
-            ],
             'telugu': [
                 "జై శ్రీమన్నారాయణ! 🙏 నేను బాగున్నాను, అడిగినందుకు ధన్యవాదాలు! నేను మీకు భగవద్గీత గురించి నేర్చుకోవడంలో ఎలా సహాయపడగలను?",
                 "జై శ్రీమన్నారాయణ! 🙏 నేను చక్కగా ఉన్నాను, మీ ఆందోళనకు ధన్యవాదాలు! భగవద్గీత గురించి మీరు ఏమి తెలుసుకోవాలనుకుంటున్నారు?",
                 "జై శ్రీమన్నారాయణ! 🙏 అన్నీ బాగున్నాయి, ధన్యవాదాలు! భగవద్గీత బోధనలలో మీకు నేను ఎలా సహాయపడగలను?",
                 "జై శ్రీమన్నారాయణ! 🙏 నేను చాలా బాగున్నాను! గీతలో కృష్ణుడి జ్ఞానం గురించి మీ ప్రశ్నలు ఏమిటి?",
                 "జై శ్రీమన్నారాయణ! 🙏 అన్నీ అద్భుతంగా ఉన్నాయి, ధన్యవాదాలు! ఈరోజు భగవద్గీతను అన్వేషించడంలో మీకు నేను ఎలా సహాయపడగలను?"
-            ],
-            'kannada': [
-                "ಜೈ ಶ್ರೀಮನ್ನಾರಾಯಣ! 🙏 ನಾನು ಚೆನ್ನಾಗಿದ್ದೇನೆ, ಕೇಳಿದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು! ನಾನು ನಿಮಗೆ ಭಗವದ್ಗೀತೆಯ ಬಗ್ಗೆ ಕಲಿಯಲು ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?",
-                "ಜೈ ಶ್ರೀಮನ್ನಾರಾಯಣ! 🙏 ನಾನು ಚೆನ್ನಾಗಿದ್ದೇನೆ, ನಿಮ್ಮ ಕಾಳಜಿಗೆ ಧನ್ಯವಾದಗಳು! ಭಗವದ್ಗೀತೆಯ ಬಗ್ಗೆ ನೀವು ಏನು ತಿಳಿದುಕೊಳ್ಳಲು ಬಯಸುತ್ತೀರಿ?",
-                "ಜೈ ಶ್ರೀಮನ್ನಾರಾಯಣ! 🙏 ಎಲ್ಲವೂ ಚೆನ್ನಾಗಿದೆ, ಧನ್ಯವಾದಗಳು! ಭಗವದ್ಗೀತೆಯ ಬೋಧನೆಗಳಲ್ಲಿ ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?",
-                "ಜೈ ಶ್ರೀಮನ್ನಾರಾಯಣ! 🙏 ನಾನು ತುಂಬಾ ಚೆನ್ನಾಗಿದ್ದೇನೆ! ಗೀತೆಯಲ್ಲಿ ಕೃಷ್ಣನ ಬುದ್ಧಿವಂತಿಕೆಯ ಬಗ್ಗೆ ನಿಮ್ಮ ಪ್ರಶ್ನೆಗಳು ಯಾವುವು?",
-                "ಜೈ ಶ್ರೀಮನ್ನಾರಾಯಣ! 🙏 ಎಲ್ಲವೂ ಅದ್ಭುತವಾಗಿದೆ, ಧನ್ಯವಾದಗಳು! ಇಂದು ಭಗವದ್ಗೀತೆಯನ್ನು ಅನ್ವೇಷಿಸಲು ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?"
-            ],
-            'marathi': [
-                "जय श्रीमन्नारायण! 🙏 मी ठीक आहे, विचारल्याबद्दल धन्यवाद! मी तुम्हाला भगवद्गीता बद्दल शिकण्यात कशी मदत करू शकतो?",
-                "जय श्रीमन्नारायण! 🙏 मी चांगले आहे, तुमच्या काळजीबद्दल धन्यवाद! भगवद्गीता बद्दल तुम्हाला काय जाणून घ्यायचे आहे?",
-                "जय श्रीमन्नारायण! 🙏 सर्व काही ठीक आहे, धन्यवाद! भगवद्गीतेच्या शिकवणींमध्ये मी तुम्हाला कशी मदत करू शकतो?",
-                "जय श्रीमन्नारायण! 🙏 मी खूप चांगले आहे! गीतेमध्ये कृष्णाच्या बुद्धिमत्तेबद्दल तुमचे प्रश्न काय आहेत?",
-                "जय श्रीमन्नारायण! 🙏 सर्व काही अद्भुत आहे, धन्यवाद! आज भगवद्गीतेचा शोध घेण्यात मी तुम्हाला कशी मदत करू शकतो?"
             ]
         }
         language_responses = responses.get(language, responses['english'])
@@ -321,6 +314,18 @@ def process_chat_query(query: str, session_id: Optional[str] = None):
         # The topics_keywords and corresponding if block have been removed
         
         is_greeting_detected, detected_language = detect_language_and_greeting(query)
+        
+        # Check if the detected language is supported (English/Telugu only)
+        if detected_language not in ['english', 'telugu']:
+            answer = get_language_restriction_response()
+            add_to_conversation_history(session_id, query, answer, 'english')
+            return {
+                "answer": answer,
+                "confidence": 2.0,
+                "sources": [],
+                "session_id": session_id
+            }
+        
         conversation_context = get_conversation_context(session_id, detected_language)
         
         if is_greeting_detected:
