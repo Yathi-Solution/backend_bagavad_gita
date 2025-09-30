@@ -40,11 +40,11 @@ json_processor = JSONDataProcessor()
 frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
 app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
-@app.get("/")
-async def root():
-    return {"message": "Bhagavad Gita Search API", "status": "running"}
+# @app.get("/")
+# async def root():
+#     return {"message": "Bhagavad Gita Search API", "status": "running"}
 
-@app.get("/app")
+@app.get("/")
 async def serve_frontend():
     """Serve the frontend application"""
     frontend_file = os.path.join(os.path.dirname(__file__), '..', 'index.html')
@@ -95,7 +95,7 @@ async def search_bhagavad_gita(query_data: SearchQuery):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/pinecone/search", response_model=ChatResponse)
 async def chat_with_bhagavad_gita(chat_data: ChatMessage):
     """
     Chat with Bhagavad Gita - finds relevant passages based on user message.
@@ -185,7 +185,7 @@ async def get_episodes():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get episode info: {str(e)}")
 
-@app.post("/chat/llm", response_model=LLMChatResponse)
+@app.post("/chat", response_model=LLMChatResponse)
 async def chat_with_llm(llm_chat_data: LLMChatMessage):
     """
     Chat with Bhagavad Gita using LLM - finds relevant passages and generates intelligent responses.
@@ -200,8 +200,8 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
         # Get the Pinecone index
         index = pinecone_service.get_index()
         
-        # Generate embedding for the user message
-        query_embedding = embed_text(llm_chat_data.message)
+        # Generate embedding for the user query
+        query_embedding = embed_text(llm_chat_data.query)
         
         # Search for relevant passages
         search_results = index.query(
@@ -223,12 +223,12 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
         
         # Generate LLM response using RAG
         llm_answer = llm_service.generate_rag_response(
-            query=llm_chat_data.message,
+            query=llm_chat_data.query,
             retrieved_passages=relevant_passages
         )
         
         return LLMChatResponse(
-            query=llm_chat_data.message,
+            query=llm_chat_data.query,
             answer=llm_answer,
             relevant_passages=relevant_passages,
             total_passages=len(relevant_passages)
