@@ -27,8 +27,9 @@ class ChatResponse(BaseModel):
     total_passages: int
 
 class LLMChatMessage(BaseModel):
-    message: str
+    query: str
     top_k: Optional[int] = 5
+    session_id: Optional[str] = None
 
 class LLMChatResponse(BaseModel):
     query: str
