@@ -43,10 +43,7 @@ Thumbs.db
 
 # Logs
 *.log
-
-# Data files (optional - remove if you want to include them)
-*.json
-data/
+data
 
 # Temporary files
 *.tmp
