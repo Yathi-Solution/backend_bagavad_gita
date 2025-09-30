@@ -46,7 +46,7 @@ def extract_all_chapter_files(chapter_folder):
 
 # Extract all files from chapter1
 if __name__ == "__main__":
-    extracted_data = extract_all_chapter_files("chapter1")
+    extracted_data = extract_all_chapter_files("chapter3")
     
     print("\n" + "=" * 80)
     print("EXTRACTION SUMMARY")
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     # Optionally save all extracted data to a single file
     save_to_file = input("\nDo you want to save all extracted text to a file? (y/n): ").lower().strip()
     if save_to_file == 'y':
-        output_file = "app1/data/chapter1_extracted_text.txt"
+        output_file = "app1/data/chapter3_extracted_text.txt"
         with open(output_file, 'w', encoding='utf-8') as f:
             for file_name, text in extracted_data.items():
                 f.write(f"\n{'='*80}\n")

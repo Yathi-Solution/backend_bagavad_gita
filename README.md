@@ -87,7 +87,7 @@ backend_bagavad_gita/
 
 - `GET /` - API status and health check
 - `GET /app` - Serve frontend application
-- `POST /chat/llm` - Chat with AI assistant (RAG-powered)
+- `POST /chat` - Chat with AI assistant (RAG-powered)
 - `POST /search` - Search passages using semantic similarity
 - `POST /chat` - Simple chat endpoint
 - `POST /process-json` - Process and store JSON data in Pinecone
