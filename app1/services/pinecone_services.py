@@ -1,11 +1,12 @@
 import os
 import re
+import json
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
 import time
 from tqdm import tqdm
-from embeddings import embed_text
+from app1.services.embeddings import embed_text
 
 load_dotenv()
 
@@ -100,6 +101,9 @@ class PineconeService:
                 
                 for j, chunk_text in enumerate(text_chunks):
                     if chunk_text.strip():
+                        # Determine chapter from file name, e.g., c2-ep10 -> chapter 2
+                        chapter_match = re.search(r'c(\d+)-', file_name)
+                        chapter_num = int(chapter_match.group(1)) if chapter_match else 1
                         chunks.append({
                             'id': f"chunk_{chunk_id}",
                             'text': chunk_text.strip(),
@@ -108,7 +112,7 @@ class PineconeService:
                                 'episode': self.extract_episode_number(file_name),
                                 'chunk_index': j,
                                 'total_chunks': len(text_chunks),
-                                'source': 'bhagavad-gita-chapter1'
+                                'source': f"bhagavad-gita-chapter{chapter_num}"
                             }
                         })
                         chunk_id += 1
@@ -157,8 +161,8 @@ class PineconeService:
         return chunks
     
     def extract_episode_number(self, file_name: str) -> int:
-        """Extract episode number from file name like 'c1-ep1'."""
-        match = re.search(r'c1-ep(\d+)', file_name)
+        """Extract episode number from file name like 'c2-ep10' (chapter-agnostic)."""
+        match = re.search(r'c\d+-ep(\d+)', file_name)
         return int(match.group(1)) if match else 0
     
     def create_embeddings(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -245,9 +249,9 @@ class PineconeService:
             'source_breakdown': source_breakdown
         }
     
-    def process_chapter1_text(self, text_file_path: str = "app1/data/chapter1_extracted_text.txt"):
-        """Complete pipeline to process Chapter 1 text and store in Pinecone."""
-        print("Starting Chapter 1 text processing pipeline...")
+    def process_chapter_text(self, text_file_path: str, chapter_number: int):
+        """Complete pipeline to process Chapter text and store in Pinecone."""
+        print(f"Starting Chapter {chapter_number} text processing pipeline...")
         print("=" * 60)
         
         # Step 1: Parse text file
@@ -275,6 +279,79 @@ class PineconeService:
             'embeddings_upserted': upserted_count,
             'index_name': self.index_name
         }
+
+    def parse_episode_json(self, json_file_path: str, chapter_number: int) -> List[Dict[str, Any]]:
+        """Parse episode JSON file and create chunks for ingestion."""
+        print(f"Parsing episode JSON file: {json_file_path}")
+        
+        with open(json_file_path, 'r', encoding='utf-8') as f:
+            episodes = json.load(f)
+        
+        chunks = []
+        chunk_id = 0
+        
+        for episode_data in episodes:
+            episode_num = int(episode_data.get("episode", 0))
+            content = episode_data.get("content", "")
+            
+            if not content.strip():
+                continue
+            
+            # Split content into smaller chunks with overlap
+            text_chunks = self.split_text_into_chunks(content, max_length=1000, overlap_size=200)
+            
+            for j, chunk_text in enumerate(text_chunks):
+                if chunk_text.strip():
+                    chunks.append({
+                        'id': f"c{chapter_number}-ep{episode_num}-chunk-{j}",
+                        'text': chunk_text.strip(),
+                        'metadata': {
+                            'file_name': f"c{chapter_number}-ep{episode_num}",
+                            'episode': episode_num,
+                            'chunk_index': j,
+                            'total_chunks': len(text_chunks),
+                            'source': f"bhagavad-gita-chapter{chapter_number}"
+                        }
+                    })
+                    chunk_id += 1
+        
+        print(f"Created {len(chunks)} text chunks from {len(episodes)} episodes")
+        return chunks
+
+    def process_chapter_json(self, json_file_path: str, chapter_number: int):
+        """Complete pipeline to process Chapter JSON and store in Pinecone."""
+        print(f"Starting Chapter {chapter_number} JSON processing pipeline...")
+        print("=" * 60)
+        
+        # Step 1: Parse JSON file
+        chunks = self.parse_episode_json(json_file_path, chapter_number)
+        
+        # Step 2: Create embeddings
+        embeddings_data = self.create_embeddings(chunks)
+        
+        # Step 3: Get/create Pinecone index
+        self.get_index()
+        
+        # Step 4: Upsert to Pinecone
+        upserted_count = self.upsert_embeddings(embeddings_data)
+        
+        print("=" * 60)
+        print("PROCESSING COMPLETE!")
+        print(f"Total chunks processed: {len(chunks)}")
+        print(f"Total embeddings created: {len(embeddings_data)}")
+        print(f"Total embeddings upserted: {upserted_count}")
+        print(f"Pinecone index: {self.index_name}")
+        
+        return {
+            'chunks_processed': len(chunks),
+            'embeddings_created': len(embeddings_data),
+            'embeddings_upserted': upserted_count,
+            'index_name': self.index_name
+        }
+
+    def process_chapter1_text(self, text_file_path: str = "app1/data/chapter1_extracted_text.txt"):
+        """Backward-compatible wrapper for Chapter 1 processing."""
+        return self.process_chapter_text(text_file_path, 1)
 
 def main():
     """Main function to run the Pinecone service."""
