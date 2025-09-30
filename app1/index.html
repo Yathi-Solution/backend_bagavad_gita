@@ -339,10 +339,23 @@
             let highlightedContent = content;
             
             // Highlight "Swamiji says:" sections
-            highlightedContent = highlightedContent.replace(
-                /(Swamiji says:[^.!?]*(?:[.!?](?=\s|$)|$))/gi, 
-                '<div class="swamiji-quote">$1</div>'
-            );
+            // 1) Prefer capturing the full quoted section across sentences/newlines
+            const quotedSwamijiPattern = /(Swamiji says:\s*[“"][\s\S]*?[”"])/gi;
+            const hadQuotedMatch = quotedSwamijiPattern.test(highlightedContent);
+            if (hadQuotedMatch) {
+                highlightedContent = highlightedContent.replace(
+                    quotedSwamijiPattern,
+                    '<div class="swamiji-quote">$1</div>'
+                );
+            }
+            
+            // 2) If there were no quoted matches, fall back to capturing until end of line
+            if (!highlightedContent.includes('<div class="swamiji-quote">')) {
+                highlightedContent = highlightedContent.replace(
+                    /(Swamiji says:[^\n]*?(?:\n|$))/gi,
+                    '<div class="swamiji-quote">$1</div>'
+                );
+            }
             
             // Highlight explanations that start with common explanation patterns
             const explanationPatterns = [
@@ -413,13 +426,14 @@
             showLoading(true);
             
             try {
-                const response = await fetch(`${API_BASE_URL}/chat/llm`, {
+                const response = await fetch(`${API_BASE_URL}/chat`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        message: message,
+                        query: message,
+                        session_id: null,
                         top_k: 5
                     })
                 });

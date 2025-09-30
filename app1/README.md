@@ -78,7 +78,7 @@ app1/
 
 - `GET /` - API status
 - `GET /app` - Serve frontend application
-- `POST /chat/llm` - Chat with AI assistant
+- `POST /chat` - Chat with AI assistant
 - `POST /search` - Search passages
 - `POST /process-json` - Process data
 - `GET /episodes` - Get episode information
