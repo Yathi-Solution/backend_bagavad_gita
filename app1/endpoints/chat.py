@@ -40,11 +40,11 @@ json_processor = JSONDataProcessor()
 frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
 app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
-@app.get("/")
-async def root():
-    return {"message": "Bhagavad Gita Search API", "status": "running"}
+# @app.get("/")
+# async def root():
+#     return {"message": "Bhagavad Gita Search API", "status": "running"}
 
-@app.get("/app")
+@app.get("/")
 async def serve_frontend():
     """Serve the frontend application"""
     frontend_file = os.path.join(os.path.dirname(__file__), '..', 'index.html')
