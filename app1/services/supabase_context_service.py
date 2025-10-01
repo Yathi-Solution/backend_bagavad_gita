@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from supabase import create_client, Client
-from .memory_context_service import memory_context_service
+from services.memory_context_service import memory_context_service
 
 class SupabaseContextService:
     def __init__(self):
@@ -137,16 +137,14 @@ class SupabaseContextService:
             return await memory_context_service.add_conversation_turn(session_id, role, content)
 
         try:
-            # 🚨 NEW CODE: CONVERT ROLE TO TITLE CASE FOR DB ENUM MATCH 🚨
-            # This handles 'user' -> 'User' and 'assistant' -> 'Assistant'
-            # Assuming the DB ENUM is Title Case. If it's ALL CAPS, use role.upper()
-            db_role = role.title()
+            # Ensure role is lowercase to match database ENUM ('user', 'assistant')
+            db_role = role.lower()
 
             message_id = str(uuid.uuid4())
             data = {
                 'id': message_id,
                 'conversationId': session_id,
-                'role': db_role,  # Use the converted role
+                'role': db_role,
                 'content': content,
                 'createdAt': datetime.now(timezone.utc).isoformat(),
             }
@@ -161,7 +159,6 @@ class SupabaseContextService:
                 return message_id
 
         except Exception as e:
-            # 🔴 LOG THE ERROR (This is where the user saw the 22P02 error)
             print(f"Error storing message: {e}")
             # Fallback save to memory service if Supabase fails (optional but safe)
             return await memory_context_service.add_conversation_turn(session_id, role, content)
@@ -172,17 +169,15 @@ class SupabaseContextService:
             return await memory_context_service.store_message(session_id, content, role)
             
         try:
-            # 🚨 NEW CODE: CONVERT ROLE TO TITLE CASE FOR DB ENUM MATCH 🚨
-            # This handles 'user' -> 'User' and 'assistant' -> 'Assistant'
-            # Assuming the DB ENUM is Title Case. If it's ALL CAPS, use role.upper()
-            db_role = role.title()
+            # Ensure role is lowercase to match database ENUM ('user', 'assistant')
+            db_role = role.lower()
             
             message_id = str(uuid.uuid4())
             message_data = {
                 'id': message_id,
                 'conversationId': session_id,
                 'content': content,
-                'role': db_role,  # Use the converted role
+                'role': db_role,
                 'createdAt': datetime.now(timezone.utc).isoformat()
             }
             
