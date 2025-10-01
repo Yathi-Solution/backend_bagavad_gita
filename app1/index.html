@@ -314,6 +314,13 @@
         // Dynamic API URL - works for both local and production
         const API_BASE_URL = window.location.origin;
         
+        // Generate or retrieve session ID for context awareness
+        let sessionId = localStorage.getItem('bhagavad_gita_session_id');
+        if (!sessionId) {
+            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('bhagavad_gita_session_id', sessionId);
+        }
+        
         function addMessage(content, isUser = false) {
             const messagesContainer = document.getElementById('messages');
             const messageDiv = document.createElement('div');
@@ -434,8 +441,9 @@
                     },
                     body: JSON.stringify({
                         query: message,
-                        session_id: null,
-                        top_k: 5
+                        session_id: sessionId,
+                        top_k: 5,
+                        user_name: "Anonymous"
                     })
                 });
                 
