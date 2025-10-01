@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
 import time
 from tqdm import tqdm
-from .embeddings import embed_text
+from services.embeddings import embed_text
 
 load_dotenv()
 
