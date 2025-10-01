@@ -8,6 +8,6 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 def embed_text(text: str) -> list:
     response = client.embeddings.create(
         input=text,
-        model="text-embedding-3-large"
+        model="text-embedding-3-small"  # 1536 dimensions to match existing index
     )
     return response.data[0].embedding

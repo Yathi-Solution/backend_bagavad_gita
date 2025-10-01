@@ -21,7 +21,7 @@ class PineconeService:
         self.index_name = os.getenv("PINECONE_INDEX", "bhagavad-gita-chapter1")
         self.index = None
         
-    def create_index(self, dimension: int = 3072):
+    def create_index(self, dimension: int = 1536):
         """Create a new Pinecone index for Bhagavad Gita embeddings."""
         try:
             # Check if index exists
@@ -35,7 +35,7 @@ class PineconeService:
             print(f"Creating new Pinecone index: {self.index_name}")
             self.pc.create_index(
                 name=self.index_name,
-                dimension=dimension,  # text-embedding-3-large dimension
+                dimension=dimension,  # text-embedding-3-small dimension
                 metric="cosine",
                 spec=ServerlessSpec(
                     cloud="aws",
