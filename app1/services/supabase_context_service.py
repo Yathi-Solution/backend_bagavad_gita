@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from supabase import create_client, Client
-from .memory_context_service import memory_context_service
+from services.memory_context_service import memory_context_service
 
 class SupabaseContextService:
     def __init__(self):

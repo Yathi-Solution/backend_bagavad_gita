@@ -3,9 +3,9 @@ import os
 import re
 from typing import List, Dict, Any
 
-# Use relative imports for consistency
-from .embeddings import embed_text
-from .pinecone_services import PineconeService
+# Use absolute imports for deployment compatibility
+from services.embeddings import embed_text
+from services.pinecone_services import PineconeService
 
 class JSONDataProcessor:
     def __init__(self, chunk_size: int = 1000, overlap_size: int = 200):
