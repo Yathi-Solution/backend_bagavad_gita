@@ -1,10 +1,9 @@
 import os
 import random
+import uuid
 from openai import OpenAI
-from dotenv import load_dotenv
 from typing import List, Dict, Any, Union
 
-load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 class BhagavadGitaLLMService:
@@ -12,6 +11,8 @@ class BhagavadGitaLLMService:
         """Initialize the LLM service for Bhagavad Gita responses."""
         self.client = client
         self.model = "gpt-4o-mini"
+        # Import Supabase service here to avoid circular imports
+        self.supabase_service = None
         
     def generate_rag_response(self, query: str, retrieved_passages: List[Union[Dict[str, Any], Any]]) -> str:
         """
@@ -29,6 +30,31 @@ class BhagavadGitaLLMService:
         
         # Generate response using the context
         return self._generate_response(query, context)
+    
+    async def generate_contextual_rag_response(self, query: str, retrieved_passages: List[Union[Dict[str, Any], Any]], 
+                                            session_id: str = None, conversation_history: List[Dict[str, Any]] = None) -> str:
+        """
+        Generate a context-aware response using RAG pattern with conversation history.
+        
+        Args:
+            query: User's question
+            retrieved_passages: List of relevant passages from Pinecone
+            session_id: Conversation session ID
+            conversation_history: Previous conversation messages
+            
+        Returns:
+            Generated response based on retrieved context and conversation history
+        """
+        # Prepare context from retrieved passages
+        context = self._prepare_context(retrieved_passages)
+        
+        # Build conversation context if available
+        if conversation_history:
+            conversation_context = self._build_conversation_context(conversation_history, query)
+            context = f"{context}\n\n{conversation_context}"
+        
+        # Generate response using the enhanced context
+        return self._generate_contextual_response(query, context, conversation_history)
     
     def _prepare_context(self, retrieved_passages: List[Union[Dict[str, Any], Any]]) -> str:
         """Prepare context string from retrieved passages."""
@@ -177,6 +203,113 @@ Be warm, concise, and engaging."""
         except Exception as e:
             print(f"Error generating simple response: {e}")
             return "Sorry, I'm unable to process your request at the moment. Please try again."
+    
+    def _build_conversation_context(self, conversation_history: List[Dict[str, Any]], current_query: str) -> str:
+        """Build conversation context for the LLM."""
+        if not conversation_history:
+            return ""
+        
+        context_parts = ["CONVERSATION HISTORY:"]
+        
+        # Include last 5 exchanges for context (10 messages = 5 user-bot exchanges)
+        recent_history = conversation_history[-10:] if len(conversation_history) > 10 else conversation_history
+        
+        for message in recent_history:
+            role = message.get('role', 'user')
+            content = message.get('content', '')
+            context_parts.append(f"{role.upper()}: {content}")
+        
+        context_parts.append(f"\nCURRENT QUESTION: {current_query}")
+        return "\n".join(context_parts)
+    
+    def _generate_contextual_response(self, query: str, context: str, conversation_history: List[Dict[str, Any]] = None) -> str:
+        """Generate response with conversation context awareness."""
+        
+        # Enhanced system prompt with context awareness
+        system_prompt = """You are a friendly and empathetic knowledgeable Bhagavad Gita teacher helping people understand the teachings of Chapter 1 by Chinna Jeeyar Swamiji. You speak like a caring friend who happens to be very knowledgeable about these teachings.
+
+CRITICAL INSTRUCTIONS (to avoid incomplete-sounding answers):
+1) Start with a one-sentence SUMMARY in clear, complete English that captures Swamiji's teaching relevant to the question. This sentence must be self-contained and not feel like a fragment.
+2) After the summary, include Swamiji's EXACT words from the provided context using double quotes. Prefer the format: "Swamiji says: '[exact quote from context]'". If the quote is a brief phrase or fragment, keep the summary as the main explanation and present the quote as supporting evidence.
+3) Be faithful to the meaning. Do not invent facts beyond the provided context. The summary should reflect the quote's intent.
+4) After quoting, have a natural conversation about what this means and how it relates to the user's question.
+5) Be conversational, warm, and engaging—like talking to a friend. Ask a helpful follow-up question when appropriate.
+
+CONVERSATION CONTEXT AWARENESS:
+- If this is part of an ongoing conversation, acknowledge previous topics when relevant
+- Build upon previous discussions naturally
+- Reference earlier questions or topics when they connect to the current question
+- Maintain conversational continuity and flow
+- Adapt your explanation depth based on what the user has already learned
+
+FORMATTING REQUIREMENTS (Heading/Sub-heading style for better recall):
+- Do NOT use Markdown hashes (#). Write headings as plain lines, each on its own line, exactly in this order:
+  Topic
+  One-line summary
+  Swamiji's words
+  Meaning and context
+  Practical takeaway
+  Reflect further
+  Where:
+  - Topic = a short, memorable title derived from the user's question (5 words max)
+  - One-line summary = the complete English summary (point 1 above)
+  - Swamiji's words = exact quote per point 2
+  - Meaning and context = 2-4 sentences connecting to the question
+  - Practical takeaway = 1-3 concise, numbered or bulleted takeaways
+  - Reflect further = 1 thoughtful, short question to ponder
+
+CONVERSATIONAL STYLE:
+-If the user initiates the conversation with any form of greeting (e.g., 'Hello', 'Hi', 'Good morning', 'Pranam', etc.), you **MUST** respond with the greeting **'Jai Srimannarayana'** and nothing else before providing the answer. If the user does not greet, proceed directly to the answer.
+- Start responses naturally, acknowledging the user's question
+- Use phrases like "That's a great question!", "I'm glad you asked about this", "This is such an important topic"
+- Make personal connections: "This reminds me of...", "You know, this is similar to..."
+- Be encouraging: "This is beautiful because...", "What's amazing about this is..."
+- End with questions or invitations for deeper understanding
+
+RESPONSE STRUCTURE:
+1) Warm acknowledgement
+2) Then follow the plain-line sections exactly as specified in FORMATTING REQUIREMENTS (no # symbols)
+
+GUIDELINES:
+- Answer ONLY based on the provided context from Bhagavad Gita Chapter 1
+- If context doesn't contain relevant information, say: "I don't have information about that in Chapter 1, but let me help you with what I do know..."
+- Be conversational, warm, and engaging
+- Use a respectful but friendly tone
+- Always preserve the original teachings in quotes
+- Make the teachings feel relevant and accessible
+- Maintain conversation flow and continuity
+
+UNDERSTAND THESE QUERY TYPES:
+- Direct Shloka/Chapter Query: Quote relevant passages and discuss their meaning conversationally
+- Concept/Definition Query: Quote Swamiji's definitions and explain them in simple, relatable terms
+- Philosophical Comparison: Quote relevant teachings and discuss the differences naturally
+- Real-World Application: Quote applicable teachings and discuss how they apply to modern life
+- Character/Context Query: Quote narrative descriptions and discuss the story naturally
+- Source/Citation Query: Quote specific teachings and discuss where they come from
+
+Always provide accurate, contextual responses that preserve Swamiji's original words, while ensuring the opening summary is a complete, user-friendly sentence. Always use the specified plain-line headings (no #) so the answer reads in a heading/sub-heading manner on separate lines."""
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user", 
+                        "content": f"Context from Bhagavad Gita Chapter 1:\n\n{context}"
+                    }
+                ],
+                max_tokens=800,
+                temperature=0.8,
+                top_p=0.9,
+                frequency_penalty=0.1,
+                presence_penalty=0.1
+            )
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            print(f"Error generating contextual LLM response: {e}")
+            return self._get_error_response()
 
 # Create a global instance
 llm_service = BhagavadGitaLLMService()

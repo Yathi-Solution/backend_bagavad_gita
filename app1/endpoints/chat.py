@@ -1,10 +1,14 @@
 import os
-from fastapi import FastAPI, HTTPException
+import json
+import uuid
+from datetime import datetime
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 import sys
+from pathlib import Path
 
 # Add the app1 directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -18,8 +22,11 @@ from services.pinecone_services import PineconeService
 from services.embeddings import embed_text
 from services.llm_service import llm_service
 from services.json_processor import JSONDataProcessor
+from services.supabase_context_service import supabase_context_service
 
-load_dotenv()
+# Define BASE_DIR
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 
 app = FastAPI(title="Bhagavad Gita Search API", version="1.0.0")
 
@@ -188,15 +195,37 @@ async def get_episodes():
 @app.post("/chat", response_model=LLMChatResponse)
 async def chat_with_llm(llm_chat_data: LLMChatMessage):
     """
-    Chat with Bhagavad Gita using LLM - finds relevant passages and generates intelligent responses.
+    Chat with Bhagavad Gita using LLM with context awareness - finds relevant passages and generates intelligent responses.
     
     Args:
-        llm_chat_data: User message with optional parameters
+        llm_chat_data: User message with optional parameters including session_id
         
     Returns:
-        LLMChatResponse with AI-generated answer based on relevant passages
+        LLMChatResponse with AI-generated answer based on relevant passages and conversation history
     """
     try:
+        # Generate session_id if not provided
+        session_id = llm_chat_data.session_id or f"session_{int(datetime.now().timestamp())}"
+        
+        # Get or create user
+        user_id = await supabase_context_service.get_or_create_user(
+            llm_chat_data.user_id, 
+            llm_chat_data.user_name
+        )
+        
+        # Get or create conversation
+        await supabase_context_service.get_or_create_conversation(
+            session_id, 
+            user_id,
+            f"Bhagavad Gita Chat - {llm_chat_data.query[:50]}..."
+        )
+        
+        # Get conversation history for context
+        conversation_history = await supabase_context_service.get_conversation_context(session_id, limit=10)
+        
+        # Store user message
+        await supabase_context_service.store_message(session_id, llm_chat_data.query, "user")
+        
         # Get the Pinecone index
         index = pinecone_service.get_index()
         
@@ -221,21 +250,184 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
             )
             relevant_passages.append(passage)
         
-        # Generate LLM response using RAG
-        llm_answer = llm_service.generate_rag_response(
+        # Generate context-aware LLM response
+        llm_answer = await llm_service.generate_contextual_rag_response(
             query=llm_chat_data.query,
-            retrieved_passages=relevant_passages
+            retrieved_passages=relevant_passages,
+            session_id=session_id,
+            conversation_history=conversation_history
+        )
+        
+        # Store bot response
+        message_id = await supabase_context_service.store_message(session_id, llm_answer, "assistant")
+        
+        # Extract topics from conversation
+        topics_identified = supabase_context_service.extract_topics_from_conversation(
+            conversation_history + [{"role": "user", "content": llm_chat_data.query}, {"role": "assistant", "content": llm_answer}]
         )
         
         return LLMChatResponse(
             query=llm_chat_data.query,
             answer=llm_answer,
             relevant_passages=relevant_passages,
-            total_passages=len(relevant_passages)
+            total_passages=len(relevant_passages),
+            session_id=session_id,
+            message_id=message_id,
+            topics_identified=topics_identified
         )
         
     except Exception as e:
+        print(f"Error in contextual chat: {e}")
+        raise HTTPException(status_code=500, detail=f"Contextual LLM chat failed: {str(e)}")
+
+@app.post("/llm")
+async def chat_with_llm_simple(llm_chat_data: LLMChatMessage):
+    """
+    Simplified LLM chat endpoint using Supabase for session history.
+    Handles RAG process with conversation context from database.
+    
+    Args:
+        llm_chat_data: User query with optional session_id
+        
+    Returns:
+        LLMChatResponse with AI-generated answer based on context and history
+    """
+    try:
+        query = llm_chat_data.query
+        session_id = llm_chat_data.session_id if llm_chat_data.session_id else str(uuid.uuid4())
+        
+        # 1. 🟢 FETCH HISTORY FROM SUPABASE
+        conversation_history = await supabase_context_service.get_conversation_context(session_id, limit=10)
+        
+        # 2. RAG RETRIEVAL LOGIC - Get Pinecone index
+        index = pinecone_service.get_index()
+        
+        # Generate embedding for the user query
+        query_embedding = embed_text(query)
+        
+        # Search for relevant passages in Pinecone
+        search_results = index.query(
+            vector=query_embedding,
+            top_k=llm_chat_data.top_k,
+            include_metadata=True
+        )
+        
+        # Format context chunks from search results
+        context_chunks = []
+        relevant_passages = []
+        
+        for match in search_results.matches:
+            passage = SearchResult(
+                id=match.id,
+                score=match.score,
+                text=match.metadata.get('text', '') if match.metadata else '',
+                metadata=match.metadata or {}
+            )
+            relevant_passages.append(passage)
+            context_chunks.append(passage.text)
+        
+        # Prepare context string
+        context = "\n\n".join(context_chunks) if context_chunks else ""
+        
+        if not context_chunks:
+            # Fallback response
+            answer = "Sorry, I couldn't find relevant verses for that. Please try another question."
+            raw_response = answer
+        else:
+            # 3. 🟢 PASS HISTORY TO LLM
+            # Generate response using the context-aware LLM service
+            raw_response = await llm_service.generate_contextual_rag_response(
+                query=query,
+                retrieved_passages=relevant_passages,
+                session_id=session_id,
+                conversation_history=conversation_history
+            )
+            answer = raw_response
+        
+        # 4. 🟢 SAVE CURRENT TURN TO SUPABASE
+        # First ensure the conversation exists
+        user_id = llm_chat_data.user_id if llm_chat_data.user_id else "anonymous"
+        await supabase_context_service.get_or_create_user(user_id, llm_chat_data.user_name)
+        await supabase_context_service.get_or_create_conversation(
+            session_id,
+            user_id,
+            f"Bhagavad Gita Chat - {query[:50]}..."
+        )
+        
+        # Save user message
+        await supabase_context_service.store_message(session_id, query, "user")
+        
+        # Save assistant response
+        message_id = await supabase_context_service.store_message(session_id, answer, "assistant")
+        
+        return LLMChatResponse(
+            query=query,
+            answer=answer,
+            relevant_passages=relevant_passages,
+            total_passages=len(relevant_passages),
+            session_id=session_id,
+            message_id=message_id,
+            topics_identified=[]
+        )
+        
+    except Exception as e:
+        print(f"Error in LLM chat: {e}")
         raise HTTPException(status_code=500, detail=f"LLM chat failed: {str(e)}")
+
+@app.get("/history")
+async def get_chat_history(session_id: str = Query(..., description="Session ID to retrieve history for")):
+    """
+    Get conversation history for a session from Supabase.
+    
+    Args:
+        session_id: The session ID to retrieve history for
+        
+    Returns:
+        Dict with conversation history
+    """
+    try:
+        # 5. 🟢 USE SUPABASE TO FETCH HISTORY
+        history = await supabase_context_service.get_conversation_context(session_id)
+        
+        # The history returned is already the list of turns, ready for the frontend
+        return {
+            "session_id": session_id,
+            "history": history
+        }
+        
+    except Exception as e:
+        print(f"Error fetching history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch history: {str(e)}")
+
+@app.post("/feedback")
+async def submit_feedback(feedback_data: dict):
+    """
+    Submit user feedback for conversation quality.
+    
+    Args:
+        feedback_data: Dictionary containing feedback information
+        
+    Returns:
+        Success response with feedback ID
+    """
+    try:
+        feedback_id = await supabase_context_service.store_feedback(
+            session_id=feedback_data.get('session_id'),
+            query_text=feedback_data.get('query_text', ''),
+            answer_text=feedback_data.get('answer_text', ''),
+            rating=feedback_data.get('rating'),
+            feedback=feedback_data.get('feedback', ''),
+            user_name=feedback_data.get('user_name', 'Anonymous')
+        )
+        
+        return {
+            "status": "success",
+            "message": "Feedback submitted successfully",
+            "feedback_id": feedback_id
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Feedback submission failed: {str(e)}")
 
 @app.get("/health")
 async def health_check():
