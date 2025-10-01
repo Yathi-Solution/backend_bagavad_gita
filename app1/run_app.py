@@ -12,11 +12,20 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 if __name__ == "__main__":
+    # Get port from environment variable (for Render deployment) or default to 8000
+    port = int(os.getenv("PORT", 8000))
+    
+    # Check if running in production (Render sets RENDER environment variable)
+    is_production = os.getenv("RENDER") is not None
+    
     print("Starting Bhagavad Gita Chat Application...")
     print("=" * 50)
-    print("Backend API: http://localhost:8000")
-    print("Frontend App: http://localhost:8000/app")
-    print("API Docs: http://localhost:8000/docs")
+    if is_production:
+        print(f"Running in PRODUCTION mode on port {port}")
+    else:
+        print(f"Backend API: http://localhost:{port}")
+        print(f"Frontend App: http://localhost:{port}")
+        print(f"API Docs: http://localhost:{port}/docs")
     print("=" * 50)
     print("Press Ctrl+C to stop the server")
     print()
@@ -25,8 +34,8 @@ if __name__ == "__main__":
         uvicorn.run(
             "endpoints.chat:app",
             host="0.0.0.0",
-            port=8000,
-            reload=True,
+            port=port,
+            reload=not is_production,  # Disable reload in production
             log_level="info"
         )
     except KeyboardInterrupt:

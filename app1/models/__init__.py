@@ -30,12 +30,17 @@ class LLMChatMessage(BaseModel):
     query: str
     top_k: Optional[int] = 5
     session_id: Optional[str] = None
+    user_id: Optional[str] = None
+    user_name: Optional[str] = "Anonymous"
 
 class LLMChatResponse(BaseModel):
     query: str
     answer: str
     relevant_passages: List[SearchResult]
     total_passages: int
+    session_id: Optional[str] = None
+    message_id: Optional[str] = None
+    topics_identified: Optional[List[str]] = []
 
 __all__ = [
     "SearchQuery",
