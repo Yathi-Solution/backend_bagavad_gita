@@ -137,8 +137,8 @@ class SupabaseContextService:
             return await memory_context_service.add_conversation_turn(session_id, role, content)
 
         try:
-            # Ensure role is lowercase to match database ENUM ('user', 'assistant')
-            db_role = role.lower()
+            # 🟢 FIX: Ensure the role is converted to ALL CAPS for the database.
+            db_role = role.upper()
 
             message_id = str(uuid.uuid4())
             data = {
@@ -169,8 +169,8 @@ class SupabaseContextService:
             return await memory_context_service.store_message(session_id, content, role)
             
         try:
-            # Ensure role is lowercase to match database ENUM ('user', 'assistant')
-            db_role = role.lower()
+            # 🟢 FIX: Ensure the role is converted to ALL CAPS for the database.
+            db_role = role.upper()
             
             message_id = str(uuid.uuid4())
             message_data = {
