@@ -1,14 +1,11 @@
 import json
 import os
 import re
-import sys
 from typing import List, Dict, Any
 
-# Add the services directory to the path
-sys.path.append(os.path.dirname(__file__))
-
-from embeddings import embed_text
-from pinecone_services import PineconeService
+# Use relative imports for consistency
+from .embeddings import embed_text
+from .pinecone_services import PineconeService
 
 class JSONDataProcessor:
     def __init__(self, chunk_size: int = 1000, overlap_size: int = 200):
