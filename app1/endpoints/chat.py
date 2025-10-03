@@ -139,7 +139,7 @@ async def chat_with_bhagavad_gita(chat_data: ChatMessage):
             relevant_passages.append(passage)
         
         # Create a response message
-        response_message = f"I found {len(relevant_passages)} relevant passages from Bhagavad Gita Chapter 1 related to your query: '{chat_data.message}'"
+        response_message = f"I found {len(relevant_passages)} relevant passages from Bhagavad Gita related to your query: '{chat_data.message}'"
         
         return ChatResponse(
             message=response_message,
@@ -204,6 +204,59 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
         LLMChatResponse with AI-generated answer based on relevant passages and conversation history
     """
     try:
+        # 1. Classify the user's intent first
+        intent = await llm_service.classify_query_intent(llm_chat_data.query)
+
+        # 2. If the user is just greeting the bot, handle it directly
+        if intent == "GREETING":
+            session_id = llm_chat_data.session_id or f"session_{int(datetime.now().timestamp())}"
+            
+            # Check if this is the first message in the session
+            conversation_history = await supabase_context_service.get_conversation_context(session_id, limit=1)
+            is_first_turn = not conversation_history
+            
+            # Dynamic Greeting Response Logic (Greeting only on first turn)
+            if is_first_turn:
+                greeting_answer = "Jai Srimannarayana! Welcome! I'm excited to help you explore the profound teachings of Bhagavad Gita. What would you like to learn about today?"
+            else:
+                greeting_answer = "Jai Srimannarayana! Great to see you again! How can I help you continue your journey through the Gita today?"
+                
+            # Store the user and assistant messages to maintain history
+            await supabase_context_service.store_message(session_id, llm_chat_data.query, "user")
+            await supabase_context_service.store_message(session_id, greeting_answer, "assistant")
+
+            return LLMChatResponse(
+                query=llm_chat_data.query,
+                answer=greeting_answer,
+                relevant_passages=[],
+                total_passages=0,
+                session_id=session_id
+            )
+
+        # NEW GUARDRAIL: Handle common sensical ChitChat questions
+        elif intent == "CHITCHAT":
+            session_id = llm_chat_data.session_id or f"session_{int(datetime.now().timestamp())}"
+
+            # Provide a common-sensical, role-appropriate answer without RAG
+            chit_chat_answer = (
+                "As a specialized assistant for the Bhagavad Gita, my purpose is to "
+                "provide philosophical guidance and textual context. I'm here to help you explore "
+                "the profound wisdom of the Gita! What subject would you like to learn about today?"
+            )
+            
+            # Store the user and assistant messages to maintain history
+            await supabase_context_service.store_message(session_id, llm_chat_data.query, "user")
+            await supabase_context_service.store_message(session_id, chit_chat_answer, "assistant")
+
+            return LLMChatResponse(
+                query=llm_chat_data.query,
+                answer=chit_chat_answer,
+                relevant_passages=[],
+                total_passages=0,
+                session_id=session_id
+            )
+        
+        # 3. If not a greeting, proceed with the full RAG process
         # Generate session_id if not provided
         session_id = llm_chat_data.session_id or f"session_{int(datetime.now().timestamp())}"
         
@@ -296,6 +349,55 @@ async def chat_with_llm_simple(llm_chat_data: LLMChatMessage):
         query = llm_chat_data.query
         session_id = llm_chat_data.session_id if llm_chat_data.session_id else str(uuid.uuid4())
         
+        # 1. Classify the user's intent first
+        intent = await llm_service.classify_query_intent(query)
+
+        # 2. If the user is just greeting the bot, handle it directly
+        if intent == "GREETING":
+            # Check if this is the first message in the session
+            conversation_history = await supabase_context_service.get_conversation_context(session_id, limit=1)
+            is_first_turn = not conversation_history
+            
+            # Dynamic Greeting Response Logic (Greeting only on first turn)
+            if is_first_turn:
+                greeting_answer = "Jai Srimannarayana! Welcome! I'm excited to help you explore the profound teachings of Bhagavad Gita. What would you like to learn about today?"
+            else:
+                greeting_answer = "Jai Srimannarayana! Great to see you again! How can I help you continue your journey through the Gita today?"
+                
+            # Store the user and assistant messages to maintain history
+            await supabase_context_service.store_message(session_id, query, "user")
+            await supabase_context_service.store_message(session_id, greeting_answer, "assistant")
+
+            return LLMChatResponse(
+                query=query,
+                answer=greeting_answer,
+                relevant_passages=[],
+                total_passages=0,
+                session_id=session_id
+            )
+
+        # NEW GUARDRAIL: Handle common sensical ChitChat questions
+        elif intent == "CHITCHAT":
+            # Provide a common-sensical, role-appropriate answer without RAG
+            chit_chat_answer = (
+                "As a specialized assistant for the Bhagavad Gita, my purpose is to "
+                "provide philosophical guidance and textual context. I'm here to help you explore "
+                "the profound wisdom of the Gita! What subject would you like to learn about today?"
+            )
+            
+            # Store the user and assistant messages to maintain history
+            await supabase_context_service.store_message(session_id, query, "user")
+            await supabase_context_service.store_message(session_id, chit_chat_answer, "assistant")
+
+            return LLMChatResponse(
+                query=query,
+                answer=chit_chat_answer,
+                relevant_passages=[],
+                total_passages=0,
+                session_id=session_id
+            )
+        
+        # 3. If not a greeting, proceed with the full RAG process
         # 1. 🟢 FETCH HISTORY FROM SUPABASE
         conversation_history = await supabase_context_service.get_conversation_context(session_id, limit=10)
         
