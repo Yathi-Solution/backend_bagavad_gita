@@ -1,11 +1,12 @@
 import os
 import json
 import uuid
+import asyncio
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from dotenv import load_dotenv
 import sys
 from pathlib import Path
@@ -19,7 +20,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
 from models import SearchQuery, SearchResponse, ChatMessage, ChatResponse, SearchResult, LLMChatMessage, LLMChatResponse
 
 from services.pinecone_services import PineconeService
-from services.embeddings import embed_text
+from services.embeddings import embed_text, embed_text_async
 from services.llm_service import llm_service
 from services.json_processor import JSONDataProcessor
 from services.supabase_context_service import supabase_context_service
@@ -212,7 +213,11 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
             session_id = llm_chat_data.session_id or f"session_{int(datetime.now().timestamp())}"
             
             # Check if this is the first message in the session
-            conversation_history = await supabase_context_service.get_conversation_context(session_id, limit=1)
+            conversation_history = await asyncio.to_thread(
+                supabase_context_service.get_conversation_context,
+                session_id,
+                limit=1
+            )
             is_first_turn = not conversation_history
             
             # Dynamic Greeting Response Logic (Greeting only on first turn)
@@ -223,7 +228,12 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
                 
             # Store the assistant message to maintain history
             # Note: User message is stored by frontend to prevent duplication
-            await supabase_context_service.store_message(session_id, greeting_answer, "assistant")
+            await asyncio.to_thread(
+                supabase_context_service.store_message,
+                session_id,
+                greeting_answer,
+                "assistant"
+            )
 
             return LLMChatResponse(
                 query=llm_chat_data.query,
@@ -246,7 +256,12 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
             
             # Store the assistant message to maintain history
             # Note: User message is stored by frontend to prevent duplication
-            await supabase_context_service.store_message(session_id, chit_chat_answer, "assistant")
+            await asyncio.to_thread(
+                supabase_context_service.store_message,
+                session_id,
+                chit_chat_answer,
+                "assistant"
+            )
 
             return LLMChatResponse(
                 query=llm_chat_data.query,
@@ -260,38 +275,51 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
         # Generate session_id if not provided
         session_id = llm_chat_data.session_id or f"session_{int(datetime.now().timestamp())}"
         
-        # Get or create user
-        user_id = await supabase_context_service.get_or_create_user(
-            llm_chat_data.user_id, 
-            llm_chat_data.user_name
-        )
+        # Note: User message is stored by frontend to prevent duplication
         
-        # Get or create conversation
-        await supabase_context_service.get_or_create_conversation(
-            session_id, 
+        # --- START CONCURRENT RAG PIPELINE FIX ---
+        
+        # 1. Prepare blocking services and concurrent tasks
+        index = pinecone_service.get_index()
+        
+        # Define tasks to run in parallel using asyncio.gather
+        tasks = [
+            # Task A: User Setup (Supabase)
+            asyncio.to_thread(
+                supabase_context_service.get_or_create_user,
+                llm_chat_data.user_id,
+                llm_chat_data.user_name
+            ),
+            # Task B: Context History fetch (Supabase)
+            asyncio.to_thread(
+                supabase_context_service.get_conversation_context,
+                session_id,
+                limit=5
+            ),
+            # Task C: Async Embedding Generation (OpenAI Async Client with Cache)
+            embed_text_async(llm_chat_data.query)
+        ]
+        
+        # Execute A, B, and C concurrently
+        user_id, conversation_history, query_embedding = await asyncio.gather(*tasks)
+        
+        # Create conversation (depends on user_id from above)
+        await asyncio.to_thread(
+            supabase_context_service.get_or_create_conversation,
+            session_id,
             user_id,
             f"Bhagavad Gita Chat - {llm_chat_data.query[:50]}..."
         )
         
-        # Get conversation history for context
-        conversation_history = await supabase_context_service.get_conversation_context(session_id, limit=10)
-        
-        # Note: User message is stored by frontend to prevent duplication
-        
-        # Get the Pinecone index
-        index = pinecone_service.get_index()
-        
-        # Generate embedding for the user query
-        query_embedding = embed_text(llm_chat_data.query)
-        
-        # Search for relevant passages
-        search_results = index.query(
+        # 2. Vector Search (Dependent on embedding, but still blocking I/O)
+        search_results = await asyncio.to_thread(
+            index.query,
             vector=query_embedding,
             top_k=llm_chat_data.top_k,
             include_metadata=True
         )
         
-        # Format results for LLM
+        # 3. Process Context
         relevant_passages = []
         for match in search_results.matches:
             passage = SearchResult(
@@ -302,7 +330,7 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
             )
             relevant_passages.append(passage)
         
-        # Generate context-aware LLM response
+        # 4. Final LLM Generation (This method is already async, so we await it directly)
         llm_answer = await llm_service.generate_contextual_rag_response(
             query=llm_chat_data.query,
             retrieved_passages=relevant_passages,
@@ -310,13 +338,20 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
             conversation_history=conversation_history
         )
         
-        # Store bot response
-        message_id = await supabase_context_service.store_message(session_id, llm_answer, "assistant")
+        # 5. Store Bot Response (Blocking I/O, needs a thread wrap)
+        message_id = await asyncio.to_thread(
+            supabase_context_service.store_message,
+            session_id,
+            llm_answer,
+            "assistant"
+        )
         
-        # Extract topics from conversation
+        # 6. Extract Topics (CPU-bound, but fast - keep as sync call)
         topics_identified = supabase_context_service.extract_topics_from_conversation(
             conversation_history + [{"role": "user", "content": llm_chat_data.query}, {"role": "assistant", "content": llm_answer}]
         )
+        
+        # --- END CONCURRENT RAG PIPELINE FIX ---
         
         return LLMChatResponse(
             query=llm_chat_data.query,
@@ -331,6 +366,176 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
     except Exception as e:
         print(f"Error in contextual chat: {e}")
         raise HTTPException(status_code=500, detail=f"Contextual LLM chat failed: {str(e)}")
+
+@app.post("/chat/stream")
+async def chat_with_llm_stream(llm_chat_data: LLMChatMessage):
+    """
+    Streaming version of chat endpoint - streams response chunks as they're generated.
+    
+    Args:
+        llm_chat_data: User message with optional parameters including session_id
+        
+    Returns:
+        Server-Sent Events stream with AI-generated answer chunks
+    """
+    async def generate_stream():
+        try:
+            # 1. Classify the user's intent first
+            intent = await llm_service.classify_query_intent(llm_chat_data.query)
+
+            # 2. If the user is just greeting the bot, handle it directly
+            if intent == "GREETING":
+                session_id = llm_chat_data.session_id or f"session_{int(datetime.now().timestamp())}"
+                
+                # Check if this is the first message in the session
+                conversation_history = await asyncio.to_thread(
+                    supabase_context_service.get_conversation_context,
+                    session_id,
+                    limit=1
+                )
+                is_first_turn = not conversation_history
+                
+                # Dynamic Greeting Response Logic
+                if is_first_turn:
+                    greeting_answer = "Jai Srimannarayana! Welcome! I'm excited to help you explore the profound teachings of Bhagavad Gita. What would you like to learn about today?"
+                else:
+                    greeting_answer = "Jai Srimannarayana! Great to see you again! How can I help you continue your journey through the Gita today?"
+                    
+                # Store the assistant message
+                await asyncio.to_thread(
+                    supabase_context_service.store_message,
+                    session_id,
+                    greeting_answer,
+                    "assistant"
+                )
+
+                # Send the greeting as SSE
+                yield f"data: {json.dumps({'type': 'content', 'content': greeting_answer})}\n\n"
+                yield f"data: {json.dumps({'type': 'metadata', 'session_id': session_id, 'total_passages': 0})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            # Handle CHITCHAT
+            elif intent == "CHITCHAT":
+                session_id = llm_chat_data.session_id or f"session_{int(datetime.now().timestamp())}"
+
+                chit_chat_answer = (
+                    "As a specialized assistant for the Bhagavad Gita, my purpose is to "
+                    "provide philosophical guidance and textual context. I'm here to help you explore "
+                    "the profound wisdom of the Gita! What subject would you like to learn about today?"
+                )
+                
+                await asyncio.to_thread(
+                    supabase_context_service.store_message,
+                    session_id,
+                    chit_chat_answer,
+                    "assistant"
+                )
+
+                yield f"data: {json.dumps({'type': 'content', 'content': chit_chat_answer})}\n\n"
+                yield f"data: {json.dumps({'type': 'metadata', 'session_id': session_id, 'total_passages': 0})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+            
+            # 3. If not a greeting, proceed with the full RAG process
+            session_id = llm_chat_data.session_id or f"session_{int(datetime.now().timestamp())}"
+            
+            # Prepare blocking services and concurrent tasks
+            index = pinecone_service.get_index()
+            
+            tasks = [
+                asyncio.to_thread(
+                    supabase_context_service.get_or_create_user,
+                    llm_chat_data.user_id,
+                    llm_chat_data.user_name
+                ),
+                asyncio.to_thread(
+                    supabase_context_service.get_conversation_context,
+                    session_id,
+                    limit=5
+                ),
+                embed_text_async(llm_chat_data.query)
+            ]
+            
+            user_id, conversation_history, query_embedding = await asyncio.gather(*tasks)
+            
+            await asyncio.to_thread(
+                supabase_context_service.get_or_create_conversation,
+                session_id,
+                user_id,
+                f"Bhagavad Gita Chat - {llm_chat_data.query[:50]}..."
+            )
+            
+            search_results = await asyncio.to_thread(
+                index.query,
+                vector=query_embedding,
+                top_k=llm_chat_data.top_k,
+                include_metadata=True
+            )
+            
+            relevant_passages = []
+            for match in search_results.matches:
+                passage = SearchResult(
+                    id=match.id,
+                    score=match.score,
+                    text=match.metadata.get('text', '') if match.metadata else '',
+                    metadata=match.metadata or {}
+                )
+                relevant_passages.append(passage)
+            
+            # Stream the LLM response
+            full_answer = ""
+            async for chunk in llm_service.generate_contextual_rag_response_stream(
+                query=llm_chat_data.query,
+                retrieved_passages=relevant_passages,
+                session_id=session_id,
+                conversation_history=conversation_history
+            ):
+                full_answer += chunk
+                yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
+            
+            # Store the complete message
+            message_id = await asyncio.to_thread(
+                supabase_context_service.store_message,
+                session_id,
+                full_answer,
+                "assistant"
+            )
+            
+            # Extract topics
+            topics_identified = supabase_context_service.extract_topics_from_conversation(
+                conversation_history + [{"role": "user", "content": llm_chat_data.query}, {"role": "assistant", "content": full_answer}]
+            )
+            
+            # Send metadata
+            metadata = {
+                'type': 'metadata',
+                'session_id': session_id,
+                'message_id': message_id,
+                'total_passages': len(relevant_passages),
+                'topics_identified': topics_identified,
+                'relevant_passages': [
+                    {
+                        'id': p.id,
+                        'score': p.score,
+                        'text': p.text[:100] + '...' if len(p.text) > 100 else p.text,
+                        'metadata': p.metadata
+                    } for p in relevant_passages
+                ]
+            }
+            yield f"data: {json.dumps(metadata)}\n\n"
+            yield "data: [DONE]\n\n"
+            
+        except Exception as e:
+            print(f"Error in streaming chat: {e}")
+            error_data = {
+                'type': 'error',
+                'error': str(e)
+            }
+            yield f"data: {json.dumps(error_data)}\n\n"
+            yield "data: [DONE]\n\n"
+    
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 @app.post("/llm")
 async def chat_with_llm_simple(llm_chat_data: LLMChatMessage):
@@ -354,7 +559,11 @@ async def chat_with_llm_simple(llm_chat_data: LLMChatMessage):
         # 2. If the user is just greeting the bot, handle it directly
         if intent == "GREETING":
             # Check if this is the first message in the session
-            conversation_history = await supabase_context_service.get_conversation_context(session_id, limit=1)
+            conversation_history = await asyncio.to_thread(
+                supabase_context_service.get_conversation_context,
+                session_id,
+                limit=1
+            )
             is_first_turn = not conversation_history
             
             # Dynamic Greeting Response Logic (Greeting only on first turn)
@@ -365,7 +574,12 @@ async def chat_with_llm_simple(llm_chat_data: LLMChatMessage):
                 
             # Store the assistant message to maintain history
             # Note: User message is stored by frontend to prevent duplication
-            await supabase_context_service.store_message(session_id, greeting_answer, "assistant")
+            await asyncio.to_thread(
+                supabase_context_service.store_message,
+                session_id,
+                greeting_answer,
+                "assistant"
+            )
 
             return LLMChatResponse(
                 query=query,
@@ -386,7 +600,12 @@ async def chat_with_llm_simple(llm_chat_data: LLMChatMessage):
             
             # Store the assistant message to maintain history
             # Note: User message is stored by frontend to prevent duplication
-            await supabase_context_service.store_message(session_id, chit_chat_answer, "assistant")
+            await asyncio.to_thread(
+                supabase_context_service.store_message,
+                session_id,
+                chit_chat_answer,
+                "assistant"
+            )
 
             return LLMChatResponse(
                 query=query,
@@ -397,23 +616,50 @@ async def chat_with_llm_simple(llm_chat_data: LLMChatMessage):
             )
         
         # 3. If not a greeting, proceed with the full RAG process
-        # 1. 🟢 FETCH HISTORY FROM SUPABASE
-        conversation_history = await supabase_context_service.get_conversation_context(session_id, limit=10)
+        # --- START CONCURRENT RAG PIPELINE FIX FOR /llm ENDPOINT ---
         
-        # 2. RAG RETRIEVAL LOGIC - Get Pinecone index
+        # 1. Prepare blocking services and concurrent tasks
         index = pinecone_service.get_index()
+        user_id = llm_chat_data.user_id if llm_chat_data.user_id else "anonymous"
         
-        # Generate embedding for the user query
-        query_embedding = embed_text(query)
+        # Define tasks to run in parallel using asyncio.gather
+        tasks = [
+            # Task A: User Setup (Supabase)
+            asyncio.to_thread(
+                supabase_context_service.get_or_create_user,
+                user_id,
+                llm_chat_data.user_name
+            ),
+            # Task B: Context History fetch (Supabase)
+            asyncio.to_thread(
+                supabase_context_service.get_conversation_context,
+                session_id,
+                limit=5
+            ),
+            # Task C: Async Embedding Generation (OpenAI Async Client with Cache)
+            embed_text_async(query)
+        ]
         
-        # Search for relevant passages in Pinecone
-        search_results = index.query(
+        # Execute A, B, and C concurrently
+        user_id, conversation_history, query_embedding = await asyncio.gather(*tasks)
+        
+        # Create conversation (depends on user_id from above)
+        await asyncio.to_thread(
+            supabase_context_service.get_or_create_conversation,
+            session_id,
+            user_id,
+            f"Bhagavad Gita Chat - {query[:50]}..."
+        )
+        
+        # 2. Vector Search (Dependent on embedding, but still blocking I/O)
+        search_results = await asyncio.to_thread(
+            index.query,
             vector=query_embedding,
             top_k=llm_chat_data.top_k,
             include_metadata=True
         )
         
-        # Format context chunks from search results
+        # 3. Process Context
         context_chunks = []
         relevant_passages = []
         
@@ -435,8 +681,7 @@ async def chat_with_llm_simple(llm_chat_data: LLMChatMessage):
             answer = "Sorry, I couldn't find relevant verses for that. Please try another question."
             raw_response = answer
         else:
-            # 3. 🟢 PASS HISTORY TO LLM
-            # Generate response using the context-aware LLM service
+            # 4. Final LLM Generation (This method is already async, so we await it directly)
             raw_response = await llm_service.generate_contextual_rag_response(
                 query=query,
                 retrieved_passages=relevant_passages,
@@ -445,19 +690,16 @@ async def chat_with_llm_simple(llm_chat_data: LLMChatMessage):
             )
             answer = raw_response
         
-        # 4. 🟢 SAVE CURRENT TURN TO SUPABASE
-        # First ensure the conversation exists
-        user_id = llm_chat_data.user_id if llm_chat_data.user_id else "anonymous"
-        await supabase_context_service.get_or_create_user(user_id, llm_chat_data.user_name)
-        await supabase_context_service.get_or_create_conversation(
+        # 5. Store Bot Response (Blocking I/O, needs a thread wrap)
+        # Note: User message is stored by frontend to prevent duplication
+        message_id = await asyncio.to_thread(
+            supabase_context_service.store_message,
             session_id,
-            user_id,
-            f"Bhagavad Gita Chat - {query[:50]}..."
+            answer,
+            "assistant"
         )
         
-        # Note: User message is stored by frontend to prevent duplication
-        # Save assistant response
-        message_id = await supabase_context_service.store_message(session_id, answer, "assistant")
+        # --- END CONCURRENT RAG PIPELINE FIX FOR /llm ENDPOINT ---
         
         return LLMChatResponse(
             query=query,
@@ -486,7 +728,10 @@ async def get_chat_history(session_id: str = Query(..., description="Session ID 
     """
     try:
         # 5. 🟢 USE SUPABASE TO FETCH HISTORY
-        history = await supabase_context_service.get_conversation_context(session_id)
+        history = await asyncio.to_thread(
+            supabase_context_service.get_conversation_context,
+            session_id
+        )
         
         # The history returned is already the list of turns, ready for the frontend
         return {
@@ -510,7 +755,8 @@ async def submit_feedback(feedback_data: dict):
         Success response with feedback ID
     """
     try:
-        feedback_id = await supabase_context_service.store_feedback(
+        feedback_id = await asyncio.to_thread(
+            supabase_context_service.store_feedback,
             session_id=feedback_data.get('session_id'),
             query_text=feedback_data.get('query_text', ''),
             answer_text=feedback_data.get('answer_text', ''),

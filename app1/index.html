@@ -257,6 +257,18 @@
             line-height: 1.6;
         }
 
+        /* Streaming cursor animation */
+        .streaming-cursor::after {
+            content: '▋';
+            animation: blink 1s infinite;
+            margin-left: 2px;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
         @media (max-width: 600px) {
             .container {
                 height: 90vh;
@@ -433,8 +445,20 @@
             // Show loading
             showLoading(true);
             
+            // Create a placeholder for the bot message
+            const messagesContainer = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot-message';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.innerHTML = '<div class="highlighted-content"></div>';
+            
+            messageDiv.appendChild(contentDiv);
+            messagesContainer.appendChild(messageDiv);
+            
             try {
-                const response = await fetch(`${API_BASE_URL}/chat`, {
+                const response = await fetch(`${API_BASE_URL}/chat/stream`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -442,7 +466,7 @@
                     body: JSON.stringify({
                         query: message,
                         session_id: sessionId,
-                        top_k: 5,
+                        top_k: 3,
                         user_name: "Anonymous"
                     })
                 });
@@ -451,23 +475,156 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 
-                const data = await response.json();
+                // Hide loading as soon as stream starts
+                showLoading(false);
                 
-                // Add bot response
-                addMessage(data.answer);
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let fullAnswerBuffer = '';
+                let isStreamComplete = false;
+                let metadata = null;
                 
-                // Show relevant passages if available
-                if (data.relevant_passages && data.relevant_passages.length > 0) {
-                    const passagesInfo = `Found ${data.total_passages} relevant passages from Episode ${data.relevant_passages[0].metadata?.episode || 'N/A'}`;
-                    addMessage(passagesInfo);
+                // Create a shared state object for the display controller
+                const displayState = {
+                    buffer: '',
+                    complete: false
+                };
+                
+                // Start the controlled display loop
+                const displayInterval = controlledTextDisplay(contentDiv, messagesContainer, displayState);
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    
+                    // Keep the last incomplete line in the buffer
+                    buffer = lines.pop() || '';
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            
+                            if (data === '[DONE]') {
+                                isStreamComplete = true;
+                                displayState.complete = true;
+                                continue;
+                            }
+                            
+                            try {
+                                const parsed = JSON.parse(data);
+                                
+                                if (parsed.type === 'content') {
+                                    fullAnswerBuffer += parsed.content;
+                                    displayState.buffer = fullAnswerBuffer; // Update shared state
+                                } else if (parsed.type === 'metadata') {
+                                    metadata = parsed;
+                                    // Store session_id if provided
+                                    if (parsed.session_id) {
+                                        sessionId = parsed.session_id;
+                                        localStorage.setItem('bhagavad_gita_session_id', sessionId);
+                                    }
+                                    // Optionally show passages info
+                                    if (parsed.total_passages > 0) {
+                                        console.log(`Found ${parsed.total_passages} relevant passages`);
+                                    }
+                                } else if (parsed.type === 'error') {
+                                    throw new Error(parsed.error);
+                                }
+                            } catch (e) {
+                                console.error('Error parsing SSE data:', e);
+                            }
+                        }
+                    }
                 }
+                
+                // Wait for all text to be displayed
+                await waitForDisplayComplete(displayInterval, displayState, contentDiv);
+                
+                // Apply final highlighting
+                const highlightedDiv = contentDiv.querySelector('.highlighted-content');
+                if (highlightedDiv) {
+                    highlightedDiv.classList.remove('streaming-cursor');
+                }
+                contentDiv.innerHTML = highlightContent(displayState.buffer);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
                 
             } catch (error) {
                 console.error('Error:', error);
                 showError(`Sorry, I'm having trouble connecting to the server. Please make sure the backend is running on ${API_BASE_URL}`);
-            } finally {
+                // Remove the placeholder message if there was an error
+                messageDiv.remove();
                 showLoading(false);
             }
+        }
+        
+        function controlledTextDisplay(contentDiv, messagesContainer, displayState) {
+            let displayIndex = 0;
+            let firstSentenceDisplayed = false;
+            
+            const interval = setInterval(() => {
+                const bufferElement = contentDiv.querySelector('.highlighted-content');
+                if (!bufferElement) return;
+                
+                // Get the current buffer from shared state
+                const fullAnswerBuffer = displayState.buffer;
+                
+                if (displayIndex >= fullAnswerBuffer.length) {
+                    return; // Wait for more content
+                }
+                
+                // Determine display speed based on whether first sentence is done
+                let charsToAdd = 1;
+                
+                if (!firstSentenceDisplayed) {
+                    // Fast display for first sentence - show 5 characters at a time
+                    charsToAdd = Math.min(5, fullAnswerBuffer.length - displayIndex);
+                    
+                    // Check if we've reached the end of first sentence
+                    const displayedSoFar = fullAnswerBuffer.substring(0, displayIndex + charsToAdd);
+                    const sentenceEnders = ['. ', '.\n', '! ', '!\n', '? ', '?\n'];
+                    
+                    for (const ender of sentenceEnders) {
+                        if (displayedSoFar.includes(ender)) {
+                            firstSentenceDisplayed = true;
+                            break;
+                        }
+                    }
+                } else {
+                    // Normal pace for rest - show 2 characters at a time
+                    charsToAdd = Math.min(2, fullAnswerBuffer.length - displayIndex);
+                }
+                
+                displayIndex += charsToAdd;
+                const textToShow = fullAnswerBuffer.substring(0, displayIndex);
+                
+                bufferElement.textContent = textToShow;
+                bufferElement.classList.add('streaming-cursor');
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                
+            }, 30); // Run every 30ms for smooth display
+            
+            return interval;
+        }
+        
+        async function waitForDisplayComplete(interval, displayState, contentDiv) {
+            return new Promise((resolve) => {
+                const checkInterval = setInterval(() => {
+                    const displayedText = contentDiv.querySelector('.highlighted-content')?.textContent || '';
+                    const fullText = displayState.buffer;
+                    
+                    // Check if all text has been displayed and stream is complete
+                    if (displayState.complete && displayedText.length >= fullText.length) {
+                        clearInterval(interval);
+                        clearInterval(checkInterval);
+                        resolve();
+                    }
+                }, 100);
+            });
         }
         
         function sendExampleMessage(message) {
