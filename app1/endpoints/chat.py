@@ -221,8 +221,8 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
             else:
                 greeting_answer = "Jai Srimannarayana! Great to see you again! How can I help you continue your journey through the Gita today?"
                 
-            # Store the user and assistant messages to maintain history
-            await supabase_context_service.store_message(session_id, llm_chat_data.query, "user")
+            # Store the assistant message to maintain history
+            # Note: User message is stored by frontend to prevent duplication
             await supabase_context_service.store_message(session_id, greeting_answer, "assistant")
 
             return LLMChatResponse(
@@ -244,8 +244,8 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
                 "the profound wisdom of the Gita! What subject would you like to learn about today?"
             )
             
-            # Store the user and assistant messages to maintain history
-            await supabase_context_service.store_message(session_id, llm_chat_data.query, "user")
+            # Store the assistant message to maintain history
+            # Note: User message is stored by frontend to prevent duplication
             await supabase_context_service.store_message(session_id, chit_chat_answer, "assistant")
 
             return LLMChatResponse(
@@ -276,8 +276,7 @@ async def chat_with_llm(llm_chat_data: LLMChatMessage):
         # Get conversation history for context
         conversation_history = await supabase_context_service.get_conversation_context(session_id, limit=10)
         
-        # Store user message
-        await supabase_context_service.store_message(session_id, llm_chat_data.query, "user")
+        # Note: User message is stored by frontend to prevent duplication
         
         # Get the Pinecone index
         index = pinecone_service.get_index()
@@ -364,8 +363,8 @@ async def chat_with_llm_simple(llm_chat_data: LLMChatMessage):
             else:
                 greeting_answer = "Jai Srimannarayana! Great to see you again! How can I help you continue your journey through the Gita today?"
                 
-            # Store the user and assistant messages to maintain history
-            await supabase_context_service.store_message(session_id, query, "user")
+            # Store the assistant message to maintain history
+            # Note: User message is stored by frontend to prevent duplication
             await supabase_context_service.store_message(session_id, greeting_answer, "assistant")
 
             return LLMChatResponse(
@@ -385,8 +384,8 @@ async def chat_with_llm_simple(llm_chat_data: LLMChatMessage):
                 "the profound wisdom of the Gita! What subject would you like to learn about today?"
             )
             
-            # Store the user and assistant messages to maintain history
-            await supabase_context_service.store_message(session_id, query, "user")
+            # Store the assistant message to maintain history
+            # Note: User message is stored by frontend to prevent duplication
             await supabase_context_service.store_message(session_id, chit_chat_answer, "assistant")
 
             return LLMChatResponse(
@@ -456,9 +455,7 @@ async def chat_with_llm_simple(llm_chat_data: LLMChatMessage):
             f"Bhagavad Gita Chat - {query[:50]}..."
         )
         
-        # Save user message
-        await supabase_context_service.store_message(session_id, query, "user")
-        
+        # Note: User message is stored by frontend to prevent duplication
         # Save assistant response
         message_id = await supabase_context_service.store_message(session_id, answer, "assistant")
         
