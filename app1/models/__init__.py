@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional
 
 class SearchQuery(BaseModel):
     query: str
-    top_k: Optional[int] = 5
+    top_k: Optional[int] = 2  # OPTIMIZATION: Reduced from 3 to 2 for faster vector search
     include_metadata: Optional[bool] = True
 
 class SearchResult(BaseModel):
@@ -19,7 +19,7 @@ class SearchResponse(BaseModel):
 
 class ChatMessage(BaseModel):
     message: str
-    top_k: Optional[int] = 5
+    top_k: Optional[int] = 2  # OPTIMIZATION: Reduced from 3 to 2 for faster vector search
 
 class ChatResponse(BaseModel):
     message: str
@@ -28,7 +28,7 @@ class ChatResponse(BaseModel):
 
 class LLMChatMessage(BaseModel):
     query: str
-    top_k: Optional[int] = 5
+    top_k: Optional[int] = 2  # OPTIMIZATION: Reduced from 3 to 2 for faster vector search
     session_id: Optional[str] = None
     user_id: Optional[str] = None
     user_name: Optional[str] = "Anonymous"

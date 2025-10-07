@@ -30,10 +30,10 @@ class SupabaseContextService:
             print(f"Failed to initialize Supabase: {e}")
             print("   Bot will work with in-memory context only.")
         
-    async def get_or_create_user(self, user_id: str = None, user_name: str = "Anonymous") -> str:
+    def get_or_create_user(self, user_id: str = None, user_name: str = "Anonymous") -> str:
         """Get or create a user in the database."""
         if not self.enabled:
-            return await memory_context_service.get_or_create_user(user_id, user_name)
+            return memory_context_service.get_or_create_user(user_id, user_name)
             
         try:
             if user_id:
@@ -66,12 +66,12 @@ class SupabaseContextService:
             
         except Exception as e:
             print(f"Error managing user: {e}")
-            return await memory_context_service.get_or_create_user(user_id, user_name)
+            return memory_context_service.get_or_create_user(user_id, user_name)
     
-    async def get_or_create_conversation(self, session_id: str, user_id: str, title: str = None) -> str:
+    def get_or_create_conversation(self, session_id: str, user_id: str, title: str = None) -> str:
         """Get or create a conversation for the session."""
         if not self.enabled:
-            return await memory_context_service.get_or_create_conversation(session_id, user_id, title)
+            return memory_context_service.get_or_create_conversation(session_id, user_id, title)
             
         try:
             # Check if conversation exists
@@ -97,12 +97,12 @@ class SupabaseContextService:
             
         except Exception as e:
             print(f"Error managing conversation: {e}")
-            return await memory_context_service.get_or_create_conversation(session_id, user_id, title)
+            return memory_context_service.get_or_create_conversation(session_id, user_id, title)
     
-    async def get_conversation_context(self, session_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_conversation_context(self, session_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent conversation messages for context."""
         if not self.enabled:
-            return await memory_context_service.get_conversation_context(session_id, limit)
+            return memory_context_service.get_conversation_context(session_id, limit)
             
         try:
             result = self.supabase.table('messages')\
@@ -128,13 +128,13 @@ class SupabaseContextService:
             
         except Exception as e:
             print(f"Error fetching conversation context: {e}")
-            return await memory_context_service.get_conversation_context(session_id, limit)
+            return memory_context_service.get_conversation_context(session_id, limit)
     
-    async def add_conversation_turn(self, session_id: str, role: str, content: str):
+    def add_conversation_turn(self, session_id: str, role: str, content: str):
         """Adds a single message (turn) to the conversation history in Supabase."""
         if not self.enabled:
             print("Supabase disabled. Falling back to memory service for save.")
-            return await memory_context_service.add_conversation_turn(session_id, role, content)
+            return memory_context_service.add_conversation_turn(session_id, role, content)
 
         try:
             # 🟢 FIX: Ensure the role is converted to ALL CAPS for the database.
@@ -161,12 +161,12 @@ class SupabaseContextService:
         except Exception as e:
             print(f"Error storing message: {e}")
             # Fallback save to memory service if Supabase fails (optional but safe)
-            return await memory_context_service.add_conversation_turn(session_id, role, content)
+            return memory_context_service.add_conversation_turn(session_id, role, content)
     
-    async def store_message(self, session_id: str, content: str, role: str) -> str:
+    def store_message(self, session_id: str, content: str, role: str) -> str:
         """Store a message in the conversation."""
         if not self.enabled:
-            return await memory_context_service.store_message(session_id, content, role)
+            return memory_context_service.store_message(session_id, content, role)
             
         try:
             # 🟢 FIX: Ensure the role is converted to ALL CAPS for the database.
@@ -186,13 +186,13 @@ class SupabaseContextService:
             
         except Exception as e:
             print(f"Error storing message: {e}")
-            return await memory_context_service.store_message(session_id, content, role)
+            return memory_context_service.store_message(session_id, content, role)
     
-    async def store_feedback(self, session_id: str, query_text: str, answer_text: str = None, 
+    def store_feedback(self, session_id: str, query_text: str, answer_text: str = None, 
                            rating: int = None, feedback: str = None, user_name: str = None) -> str:
         """Store user feedback for the conversation."""
         if not self.enabled:
-            return await memory_context_service.store_feedback(session_id, query_text, answer_text, rating, feedback, user_name)
+            return memory_context_service.store_feedback(session_id, query_text, answer_text, rating, feedback, user_name)
             
         try:
             feedback_data = {
@@ -212,7 +212,7 @@ class SupabaseContextService:
             
         except Exception as e:
             print(f"Error storing feedback: {e}")
-            return await memory_context_service.store_feedback(session_id, query_text, answer_text, rating, feedback, user_name)
+            return memory_context_service.store_feedback(session_id, query_text, answer_text, rating, feedback, user_name)
     
     def build_context_prompt(self, conversation_history: List[Dict[str, Any]], current_query: str) -> str:
         """Build context-aware prompt from conversation history."""

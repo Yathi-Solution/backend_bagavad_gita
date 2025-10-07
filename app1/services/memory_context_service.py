@@ -15,7 +15,7 @@ class MemoryContextService:
         self.users: Dict[str, Dict[str, Any]] = {}
         print("Memory context service initialized (in-memory conversation history)")
     
-    async def get_or_create_user(self, user_id: str = None, user_name: str = "Anonymous") -> str:
+    def get_or_create_user(self, user_id: str = None, user_name: str = "Anonymous") -> str:
         """Get or create a user in memory."""
         if not user_id:
             user_id = str(uuid.uuid4())
@@ -30,13 +30,13 @@ class MemoryContextService:
         
         return user_id
     
-    async def get_or_create_conversation(self, session_id: str, user_id: str, title: str = None) -> str:
+    def get_or_create_conversation(self, session_id: str, user_id: str, title: str = None) -> str:
         """Get or create a conversation in memory."""
         if session_id not in self.conversations:
             self.conversations[session_id] = []
         return session_id
     
-    async def get_conversation_context(self, session_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_conversation_context(self, session_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent conversation messages for context."""
         if session_id not in self.conversations:
             return []
@@ -44,7 +44,11 @@ class MemoryContextService:
         # Return last 'limit' messages
         return self.conversations[session_id][-limit:] if self.conversations[session_id] else []
     
-    async def store_message(self, session_id: str, content: str, role: str) -> str:
+    def add_conversation_turn(self, session_id: str, role: str, content: str) -> str:
+        """Adds a single message (turn) to the conversation history in memory."""
+        return self.store_message(session_id, content, role)
+    
+    def store_message(self, session_id: str, content: str, role: str) -> str:
         """Store a message in the conversation."""
         message_id = str(uuid.uuid4())
         message_data = {
@@ -58,7 +62,7 @@ class MemoryContextService:
         self.conversations[session_id].append(message_data)
         return message_id
     
-    async def store_feedback(self, session_id: str, query_text: str, answer_text: str = None, 
+    def store_feedback(self, session_id: str, query_text: str, answer_text: str = None, 
                            rating: int = None, feedback: str = None, user_name: str = None) -> str:
         """Store user feedback (placeholder - not persisted in memory)."""
         return str(uuid.uuid4())
